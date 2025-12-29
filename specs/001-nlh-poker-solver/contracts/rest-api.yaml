@@ -1,0 +1,989 @@
+openapi: 3.0.3
+info:
+  title: No-Limit Hold'em Poker Solver API
+  description: |
+    REST API for submitting, monitoring, and querying poker solver jobs.
+    Provides endpoints for configuration management, job submission, progress tracking, and strategy queries.
+  version: 1.0.0
+  contact:
+    name: NLH Solver Team
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+  - url: https://api.nlhsolver.example.com/v1
+    description: Production server (future)
+
+tags:
+  - name: configurations
+    description: Solve configuration management
+  - name: jobs
+    description: Solve job submission and monitoring
+  - name: strategies
+    description: Strategy query and retrieval
+  - name: health
+    description: Service health and status
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns service health status and version information
+      operationId: healthCheck
+      tags:
+        - health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /configurations:
+    post:
+      summary: Create solve configuration
+      description: Create a new solve configuration with game parameters
+      operationId: createConfiguration
+      tags:
+        - configurations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConfigurationRequest'
+      responses:
+        '201':
+          description: Configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveConfiguration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: List configurations
+      description: Retrieve all solve configurations
+      operationId: listConfigurations
+      tags:
+        - configurations
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of configurations to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of configurations to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationList'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /configurations/{configId}:
+    get:
+      summary: Get configuration by ID
+      description: Retrieve a specific solve configuration
+      operationId: getConfiguration
+      tags:
+        - configurations
+      parameters:
+        - $ref: '#/components/parameters/ConfigId'
+      responses:
+        '200':
+          description: Configuration found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveConfiguration'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete configuration
+      description: Delete a solve configuration (only if no associated jobs)
+      operationId: deleteConfiguration
+      tags:
+        - configurations
+      parameters:
+        - $ref: '#/components/parameters/ConfigId'
+      responses:
+        '204':
+          description: Configuration deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Cannot delete configuration with associated jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /jobs:
+    post:
+      summary: Submit solve job
+      description: Create and submit a new solve job with specified configuration
+      operationId: submitJob
+      tags:
+        - jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitJobRequest'
+      responses:
+        '202':
+          description: Job submitted successfully (accepted for processing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: List solve jobs
+      description: Retrieve solve jobs with optional filtering by status
+      operationId: listJobs
+      tags:
+        - jobs
+      parameters:
+        - name: status
+          in: query
+          description: Filter by job status
+          schema:
+            $ref: '#/components/schemas/JobStatus'
+        - name: configId
+          in: query
+          description: Filter by configuration ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of jobs to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of jobs to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobList'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /jobs/{jobId}:
+    get:
+      summary: Get job by ID
+      description: Retrieve a specific solve job with current status and progress
+      operationId: getJob
+      tags:
+        - jobs
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveJob'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Cancel job
+      description: Cancel a running or pending solve job
+      operationId: cancelJob
+      tags:
+        - jobs
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveJob'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Job cannot be cancelled (already in terminal state)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /jobs/{jobId}/progress:
+    get:
+      summary: Get job progress
+      description: Retrieve detailed progress information for a running job
+      operationId: getJobProgress
+      tags:
+        - jobs
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Progress information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobProgress'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /strategies:
+    get:
+      summary: List strategies
+      description: Retrieve all completed strategy profiles
+      operationId: listStrategies
+      tags:
+        - strategies
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of strategies to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of strategies to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of strategies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyList'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /strategies/{strategyId}:
+    get:
+      summary: Get strategy by ID
+      description: Retrieve a specific strategy profile
+      operationId: getStrategy
+      tags:
+        - strategies
+      parameters:
+        - $ref: '#/components/parameters/StrategyId'
+      responses:
+        '200':
+          description: Strategy found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /strategies/{strategyId}/query:
+    post:
+      summary: Query strategy
+      description: Query optimal play recommendations for a specific game state
+      operationId: queryStrategy
+      tags:
+        - strategies
+      parameters:
+        - $ref: '#/components/parameters/StrategyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategyQueryRequest'
+      responses:
+        '200':
+          description: Strategy recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    ConfigId:
+      name: configId
+      in: path
+      description: Unique identifier for solve configuration
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    JobId:
+      name: jobId
+      in: path
+      description: Unique identifier for solve job
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    StrategyId:
+      name: strategyId
+      in: path
+      description: Unique identifier for strategy profile
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        version:
+          type: string
+          example: "1.0.0"
+        uptime:
+          type: integer
+          description: Service uptime in seconds
+        activeJobs:
+          type: integer
+          description: Number of currently running jobs
+
+    CreateConfigurationRequest:
+      type: object
+      required:
+        - numPlayers
+        - stackSizes
+        - startingPosition
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "100bb HU BTN vs BB"
+        description:
+          type: string
+          maxLength: 500
+          example: "Standard heads-up configuration with 100bb stacks"
+        numPlayers:
+          type: integer
+          minimum: 2
+          maximum: 6
+          example: 2
+        stackSizes:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            minimum: 10
+            maximum: 500
+          example:
+            BTN: 100
+            BB: 100
+        startingPosition:
+          $ref: '#/components/schemas/Position'
+        convergenceCriteria:
+          $ref: '#/components/schemas/ConvergenceCriteria'
+        betSizingScheme:
+          $ref: '#/components/schemas/BetSizingScheme'
+        handAbstraction:
+          $ref: '#/components/schemas/HandAbstraction'
+
+    SolveConfiguration:
+      allOf:
+        - $ref: '#/components/schemas/CreateConfigurationRequest'
+        - type: object
+          required:
+            - configId
+            - createdAt
+            - updatedAt
+          properties:
+            configId:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ConvergenceCriteria:
+      type: object
+      properties:
+        targetExploitability:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 5.0
+          default: 0.5
+          description: Target exploitability as percentage of pot
+        maxIterations:
+          type: integer
+          format: int64
+          minimum: 1000
+          default: 5000000
+        evaluationFrequency:
+          type: integer
+          minimum: 100
+          maximum: 100000
+          default: 10000
+        timeoutHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          nullable: true
+
+    BetSizingScheme:
+      type: object
+      required:
+        - sizes
+      properties:
+        sizes:
+          type: array
+          items:
+            $ref: '#/components/schemas/BetSize'
+          minItems: 1
+          example:
+            - type: POT_RELATIVE
+              multiplier: 0.33
+            - type: POT_RELATIVE
+              multiplier: 0.5
+            - type: POT_RELATIVE
+              multiplier: 0.75
+            - type: POT_RELATIVE
+              multiplier: 1.0
+            - type: POT_RELATIVE
+              multiplier: 1.5
+            - type: ALL_IN
+        allowCustomSizes:
+          type: boolean
+          default: false
+
+    BetSize:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [POT_RELATIVE, ALL_IN]
+        multiplier:
+          type: number
+          format: double
+          description: Required for POT_RELATIVE, multiplier of pot size
+
+    HandAbstraction:
+      type: object
+      properties:
+        preflopBuckets:
+          type: integer
+          default: 169
+          const: 169
+        flopBuckets:
+          type: integer
+          minimum: 50
+          maximum: 500
+          default: 200
+        turnBuckets:
+          type: integer
+          minimum: 50
+          maximum: 500
+          default: 200
+        riverBuckets:
+          type: integer
+          minimum: 50
+          maximum: 500
+          default: 200
+        bucketingMethod:
+          type: string
+          enum: [EQUITY_HISTOGRAM, POTENTIAL_AWARE]
+          default: EQUITY_HISTOGRAM
+
+    SubmitJobRequest:
+      type: object
+      required:
+        - configurationId
+      properties:
+        configurationId:
+          type: string
+          format: uuid
+        executionLocation:
+          $ref: '#/components/schemas/ExecutionLocation'
+
+    SolveJob:
+      type: object
+      required:
+        - jobId
+        - configurationId
+        - status
+        - progress
+        - createdAt
+        - executionLocation
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        configurationId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        progress:
+          $ref: '#/components/schemas/JobProgress'
+        result:
+          $ref: '#/components/schemas/SolveResult'
+          nullable: true
+        error:
+          $ref: '#/components/schemas/ErrorInfo'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        submittedBy:
+          type: string
+          default: "system"
+        executionLocation:
+          $ref: '#/components/schemas/ExecutionLocation'
+
+    JobStatus:
+      type: string
+      enum:
+        - PENDING
+        - RUNNING
+        - COMPLETED
+        - PARTIAL
+        - FAILED
+        - CANCELLED
+
+    JobProgress:
+      type: object
+      required:
+        - iterationsCompleted
+        - lastUpdatedAt
+      properties:
+        iterationsCompleted:
+          type: integer
+          format: int64
+          minimum: 0
+        currentExploitability:
+          type: number
+          format: double
+          nullable: true
+          description: Latest exploitability measurement (% of pot)
+        estimatedIterationsRemaining:
+          type: integer
+          format: int64
+          nullable: true
+        estimatedTimeRemainingSeconds:
+          type: integer
+          format: int64
+          nullable: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+
+    SolveResult:
+      type: object
+      required:
+        - strategyProfileId
+        - finalExploitability
+        - iterationsRun
+        - converged
+        - completionType
+        - executionTimeSeconds
+        - storagePathPb
+      properties:
+        strategyProfileId:
+          type: string
+          format: uuid
+        finalExploitability:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        iterationsRun:
+          type: integer
+          format: int64
+          minimum: 1
+        converged:
+          type: boolean
+        completionType:
+          $ref: '#/components/schemas/CompletionType'
+        executionTimeSeconds:
+          type: integer
+          format: int64
+          minimum: 1
+        storagePathPb:
+          type: string
+          description: File path to .pb.gz strategy file
+
+    CompletionType:
+      type: string
+      enum:
+        - CONVERGED
+        - ITERATION_LIMIT
+        - TIMEOUT
+
+    ErrorInfo:
+      type: object
+      required:
+        - errorCode
+        - message
+        - isRetriable
+      properties:
+        errorCode:
+          type: string
+          maxLength: 50
+          example: OUT_OF_MEMORY
+        message:
+          type: string
+          maxLength: 500
+        stackTrace:
+          type: string
+          maxLength: 10000
+          nullable: true
+        isRetriable:
+          type: boolean
+
+    ExecutionLocation:
+      type: string
+      enum:
+        - LOCAL
+        - REMOTE
+      default: LOCAL
+
+    Position:
+      type: string
+      enum:
+        - BTN
+        - SB
+        - BB
+        - UTG
+        - MP
+        - CO
+
+    StrategyProfile:
+      type: object
+      required:
+        - strategyId
+        - solveJobId
+        - exploitability
+        - createdAt
+      properties:
+        strategyId:
+          type: string
+          format: uuid
+        solveJobId:
+          type: string
+          format: uuid
+        exploitability:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        createdAt:
+          type: string
+          format: date-time
+
+    StrategyQueryRequest:
+      type: object
+      required:
+        - gameState
+        - position
+      properties:
+        gameState:
+          $ref: '#/components/schemas/GameState'
+        position:
+          $ref: '#/components/schemas/Position'
+
+    GameState:
+      type: object
+      required:
+        - street
+        - board
+        - pot
+        - playerStates
+        - actionHistory
+      properties:
+        street:
+          $ref: '#/components/schemas/Street'
+        board:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+          minItems: 0
+          maxItems: 5
+        pot:
+          type: number
+          format: double
+          minimum: 0
+        playerStates:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PlayerState'
+        actionHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalAction'
+
+    Street:
+      type: string
+      enum:
+        - PREFLOP
+        - FLOP
+        - TURN
+        - RIVER
+
+    Card:
+      type: string
+      pattern: '^[2-9TJQKA][shdc]$'
+      example: "As"
+      description: Rank followed by suit (s=spades, h=hearts, d=diamonds, c=clubs)
+
+    PlayerState:
+      type: object
+      required:
+        - position
+        - stackBb
+        - investedThisRound
+        - isFolded
+        - isAllIn
+      properties:
+        position:
+          $ref: '#/components/schemas/Position'
+        stackBb:
+          type: number
+          format: double
+          minimum: 0
+        investedThisRound:
+          type: number
+          format: double
+          minimum: 0
+        isFolded:
+          type: boolean
+        isAllIn:
+          type: boolean
+
+    HistoricalAction:
+      type: object
+      required:
+        - actor
+        - action
+      properties:
+        actor:
+          $ref: '#/components/schemas/Position'
+        action:
+          $ref: '#/components/schemas/Action'
+        amountBb:
+          type: number
+          format: double
+          description: Required for BET and RAISE actions
+
+    Action:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - FOLD
+            - CHECK
+            - CALL
+            - BET
+            - RAISE
+            - ALL_IN
+        sizeBb:
+          type: number
+          format: double
+          description: Required for BET and RAISE
+
+    StrategyResponse:
+      type: object
+      required:
+        - recommendations
+      properties:
+        recommendations:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+          description: Map of action to probability (0.0-1.0)
+          example:
+            BET_50_PCT_POT: 0.65
+            CHECK: 0.35
+        expectedValue:
+          type: number
+          format: double
+          nullable: true
+          description: Expected value in big blinds
+
+    ConfigurationList:
+      type: object
+      required:
+        - configurations
+        - total
+        - limit
+        - offset
+      properties:
+        configurations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SolveConfiguration'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    JobList:
+      type: object
+      required:
+        - jobs
+        - total
+        - limit
+        - offset
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SolveJob'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    StrategyList:
+      type: object
+      required:
+        - strategies
+        - total
+        - limit
+        - offset
+      properties:
+        strategies:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrategyProfile'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
