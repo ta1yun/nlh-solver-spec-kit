@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package com.nlhsolver.proto;
+
+option java_package = "com.nlhsolver.proto";
+option java_outer_classname = "JobProto";
+
+/**
+ * Protocol Buffers schema for SolveJob (T051).
+ *
+ * This defines the wire format for persisting and transmitting
+ * solve job metadata and status.
+ */
+
+message SolveJobPb {
+  // Unique job identifier
+  string job_id = 1;
+
+  // Reference to configuration
+  string configuration_id = 2;
+
+  // Job status
+  JobStatusPb status = 3;
+
+  // Current progress
+  JobProgressPb progress = 4;
+
+  // Final result (if completed)
+  optional SolveResultPb result = 5;
+
+  // Error information (if failed)
+  optional ErrorInfoPb error = 6;
+
+  // Timestamps
+  int64 created_at_epoch_millis = 7;
+  int64 started_at_epoch_millis = 8;
+  optional int64 completed_at_epoch_millis = 9;
+
+  // Execution location
+  ExecutionLocationPb execution_location = 10;
+}
+
+/**
+ * Job status enumeration.
+ */
+enum JobStatusPb {
+  JOB_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  RUNNING = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+  PARTIAL = 5;
+  CANCELLED = 6;
+}
+
+/**
+ * Job progress information.
+ */
+message JobProgressPb {
+  // Iterations completed so far
+  int64 iterations_completed = 1;
+
+  // Current exploitability (if available)
+  optional double current_exploitability = 2;
+
+  // Estimated iterations remaining
+  optional int64 estimated_iterations_remaining = 3;
+
+  // Estimated time remaining in seconds
+  optional int64 estimated_time_remaining_seconds = 4;
+
+  // Last update timestamp
+  int64 last_updated_at_epoch_millis = 5;
+}
+
+/**
+ * Solve result information.
+ */
+message SolveResultPb {
+  // Reference to strategy profile
+  string strategy_profile_id = 1;
+
+  // Final exploitability achieved
+  double final_exploitability = 2;
+
+  // Total iterations run
+  int64 iterations_run = 3;
+
+  // Whether converged to target
+  bool converged = 4;
+
+  // How the solve terminated
+  CompletionTypePb completion_type = 5;
+
+  // Total execution time in seconds
+  int64 execution_time_seconds = 6;
+
+  // Path to persisted strategy file
+  string storage_path_pb = 7;
+}
+
+/**
+ * Completion type enumeration.
+ */
+enum CompletionTypePb {
+  COMPLETION_TYPE_UNSPECIFIED = 0;
+  CONVERGED = 1;
+  ITERATION_LIMIT = 2;
+  TIMEOUT = 3;
+}
+
+/**
+ * Error information.
+ */
+message ErrorInfoPb {
+  // Error code
+  string error_code = 1;
+
+  // Error message
+  string message = 2;
+
+  // Stack trace (optional)
+  optional string stack_trace = 3;
+
+  // Whether the error is retriable
+  bool is_retriable = 4;
+}
+
+/**
+ * Execution location enumeration.
+ */
+enum ExecutionLocationPb {
+  EXECUTION_LOCATION_UNSPECIFIED = 0;
+  LOCAL = 1;
+  REMOTE = 2;
+}

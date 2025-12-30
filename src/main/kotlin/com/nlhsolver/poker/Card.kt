@@ -11,6 +11,13 @@ data class Card(val rank: Rank, val suit: Suit) : Comparable<Card> {
     override fun toString(): String = "${rank.symbol}${suit.symbol}"
 
     companion object {
+        // Common card constants
+        val ACE_SPADES = Card(Rank.ACE, Suit.SPADES)
+        val KING_DIAMONDS = Card(Rank.KING, Suit.DIAMONDS)
+        val QUEEN_HEARTS = Card(Rank.QUEEN, Suit.HEARTS)
+        val JACK_CLUBS = Card(Rank.JACK, Suit.CLUBS)
+        val TEN_SPADES = Card(Rank.TEN, Suit.SPADES)
+
         /**
          * Parse a card from string notation (e.g., "As", "Kh", "2d")
          */
@@ -29,6 +36,11 @@ data class Card(val rank: Rank, val suit: Suit) : Comparable<Card> {
         fun createDeck(): List<Card> = Suit.entries.flatMap { suit ->
             Rank.entries.map { rank -> Card(rank, suit) }
         }
+
+        /**
+         * Alias for createDeck() for consistency with other code
+         */
+        fun standardDeck(): List<Card> = createDeck()
     }
 }
 

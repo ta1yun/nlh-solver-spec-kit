@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package com.nlhsolver.proto;
+
+option java_package = "com.nlhsolver.proto";
+option java_outer_classname = "StrategyProto";
+
+/**
+ * Protocol Buffers schema for StrategyProfile (T052).
+ *
+ * This defines the wire format for persisting and transmitting
+ * solved poker strategies. The actual strategy data (info sets and
+ * action probabilities) is stored separately from the metadata.
+ */
+
+message StrategyProfilePb {
+  // Unique strategy identifier
+  string strategy_id = 1;
+
+  // Reference to solve job that created this
+  string solve_job_id = 2;
+
+  // Final exploitability of this strategy
+  double exploitability = 3;
+
+  // Creation timestamp
+  int64 created_at_epoch_millis = 4;
+
+  // Statistics about the strategy
+  StrategyStatisticsPb statistics = 5;
+}
+
+/**
+ * Statistics about a strategy profile.
+ */
+message StrategyStatisticsPb {
+  // Number of information sets in the strategy
+  int64 info_set_count = 1;
+
+  // Total visits across all info sets
+  int64 total_visits = 2;
+
+  // Average number of actions per info set
+  double average_actions_per_info_set = 3;
+
+  // Size of strategy data in bytes (compressed)
+  int64 compressed_size_bytes = 4;
+
+  // Size of strategy data in bytes (uncompressed)
+  int64 uncompressed_size_bytes = 5;
+}
+
+/**
+ * Complete strategy data (stored separately from metadata).
+ *
+ * This contains the full game tree strategy information.
+ * Stored in a separate file due to potentially large size.
+ */
+message StrategyDataPb {
+  // Strategy profile ID this data belongs to
+  string strategy_profile_id = 1;
+
+  // All information set strategies
+  repeated InfoSetStrategyPb info_set_strategies = 2;
+}
+
+/**
+ * Strategy for a single information set.
+ */
+message InfoSetStrategyPb {
+  // Information set identifier
+  string info_set = 1;
+
+  // Action probabilities (maps action ID to probability)
+  map<string, double> action_probabilities = 2;
+
+  // Number of times this info set was visited during training
+  int64 visit_count = 3;
+
+  // Average regrets for each action (for debugging/analysis)
+  map<string, double> avg_regrets = 4;
+}
+
+/**
+ * Compact representation for querying strategies.
+ *
+ * Used for strategy queries at specific game states.
+ */
+message StrategyQueryPb {
+  // Game state information
+  GameStatePb game_state = 1;
+
+  // Recommended action probabilities
+  map<string, double> action_probabilities = 2;
+}
+
+/**
+ * Game state representation for queries.
+ */
+message GameStatePb {
+  // Street (PREFLOP, FLOP, TURN, RIVER)
+  string street = 1;
+
+  // Community cards (e.g., ["As", "Kd", "Qh"])
+  repeated string board = 2;
+
+  // Pot size in big blinds
+  double pot = 3;
+
+  // Player position
+  string position = 4;
+
+  // Action history
+  repeated string action_history = 5;
+
+  // Hand bucket (for abstraction)
+  optional int32 hand_bucket = 6;
+}

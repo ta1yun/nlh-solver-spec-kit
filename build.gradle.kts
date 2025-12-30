@@ -104,6 +104,13 @@ tasks.register<JavaExec>("verifyPhase2") {
 // Test configuration
 tasks.test {
     useJUnitPlatform()
+
+    // Show test output in console (useful for println debugging)
+    testLogging {
+        events("passed", "skipped", "failed", "standardOut", "standardError")
+        showStandardStreams = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 // Make proto-generated sources available to Kotlin compiler

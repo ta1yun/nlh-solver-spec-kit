@@ -135,25 +135,25 @@ Phase 7: Polish & Cross-Cutting Concerns
 
 ### Data Models (US1)
 
-- [ ] T023 [P] [US1] Create SolveConfiguration entity in src/main/kotlin/com/nlhsolver/solver/SolveConfiguration.kt per data-model.md
-- [ ] T024 [P] [US1] Create ConvergenceCriteria data class in src/main/kotlin/com/nlhsolver/solver/ConvergenceCriteria.kt
-- [ ] T025 [P] [US1] Create BetSizingScheme sealed class in src/main/kotlin/com/nlhsolver/solver/BetSizingScheme.kt
-- [ ] T026 [P] [US1] Create HandAbstraction data class in src/main/kotlin/com/nlhsolver/solver/HandAbstraction.kt
-- [ ] T027 [P] [US1] Create SolveJob entity in src/main/kotlin/com/nlhsolver/solver/SolveJob.kt with JobStatus enum
-- [ ] T028 [P] [US1] Create JobProgress data class in src/main/kotlin/com/nlhsolver/solver/JobProgress.kt
-- [ ] T029 [P] [US1] Create SolveResult data class in src/main/kotlin/com/nlhsolver/solver/SolveResult.kt
-- [ ] T030 [P] [US1] Create StrategyProfile entity in src/main/kotlin/com/nlhsolver/solver/StrategyProfile.kt
-- [ ] T031 [P] [US1] Implement configuration validation in src/main/kotlin/com/nlhsolver/solver/ConfigurationValidator.kt (VR-001 through VR-005)
+- [X] T023 [P] [US1] Create SolveConfiguration entity in src/main/kotlin/com/nlhsolver/solver/SolveConfiguration.kt per data-model.md
+- [X] T024 [P] [US1] Create ConvergenceCriteria data class in src/main/kotlin/com/nlhsolver/solver/ConvergenceCriteria.kt
+- [X] T025 [P] [US1] Create BetSizingScheme sealed class in src/main/kotlin/com/nlhsolver/solver/BetSizingScheme.kt
+- [X] T026 [P] [US1] Create HandAbstraction data class in src/main/kotlin/com/nlhsolver/solver/HandAbstraction.kt
+- [X] T027 [P] [US1] Create SolveJob entity in src/main/kotlin/com/nlhsolver/solver/SolveJob.kt with JobStatus enum
+- [X] T028 [P] [US1] Create JobProgress data class in src/main/kotlin/com/nlhsolver/solver/JobProgress.kt
+- [X] T029 [P] [US1] Create SolveResult data class in src/main/kotlin/com/nlhsolver/solver/SolveResult.kt
+- [X] T030 [P] [US1] Create StrategyProfile entity in src/main/kotlin/com/nlhsolver/solver/StrategyProfile.kt
+- [X] T031 [P] [US1] Implement configuration validation in src/main/kotlin/com/nlhsolver/solver/ConfigurationValidator.kt (VR-001 through VR-005)
 
 ### Game Tree Construction (US1)
 
-- [ ] T032 [US1] Define GameTreeNode data class in src/main/kotlin/com/nlhsolver/core/GameTreeNode.kt (nodeType, gameState, children, regrets, strategy)
-- [ ] T033 [US1] Define GameState data class in src/main/kotlin/com/nlhsolver/core/GameState.kt (street, board, pot, playerStates, actionHistory)
-- [ ] T034 [US1] Define PlayerState data class in src/main/kotlin/com/nlhsolver/core/PlayerState.kt (position, stack, invested, handRange, folded, allIn)
-- [ ] T035 [US1] Implement postflop hand bucketing in src/main/kotlin/com/nlhsolver/poker/PostflopBucketing.kt (k-means clustering on equity histograms)
-- [ ] T036 [US1] Implement GameTreeBuilder in src/main/kotlin/com/nlhsolver/core/GameTreeBuilder.kt (constructs tree from SolveConfiguration for heads-up)
-- [ ] T037 [US1] Implement bet sizing discretization in GameTreeBuilder (apply BetSizingScheme to generate legal actions)
-- [ ] T038 [US1] Implement game tree abstraction (hand bucketing + suit isomorphism) in GameTreeBuilder
+- [X] T032 [US1] Define GameTreeNode data class in src/main/kotlin/com/nlhsolver/core/GameTreeNode.kt (nodeType, gameState, children, regrets, strategy)
+- [X] T033 [US1] Define GameState data class in src/main/kotlin/com/nlhsolver/core/PokerGameState.kt (street, board, pot, playerStates, actionHistory)
+- [X] T034 [US1] Define PlayerState data class in src/main/kotlin/com/nlhsolver/core/PokerGameState.kt (position, stack, invested, handRange, folded, allIn)
+- [X] T035 [US1] Implement postflop hand bucketing in src/main/kotlin/com/nlhsolver/poker/PostflopBucketing.kt (k-means clustering on equity histograms)
+- [X] T036 [US1] Implement GameTreeBuilder in src/main/kotlin/com/nlhsolver/core/GameTreeBuilder.kt (constructs tree from SolveConfiguration for heads-up)
+- [X] T037 [US1] Implement bet sizing discretization in GameTreeBuilder (apply BetSizingScheme to generate legal actions)
+- [X] T038 [US1] Implement game tree abstraction (hand bucketing + suit isomorphism) in GameTreeBuilder
 - [ ] T039 [US1] Add game tree memory management (node caching, LRU eviction) in src/main/kotlin/com/nlhsolver/core/GameTreeCache.kt
 
 ### CFR+ Algorithm (US1)

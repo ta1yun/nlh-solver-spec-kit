@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package com.nlhsolver.proto;
+
+option java_package = "com.nlhsolver.proto";
+option java_outer_classname = "ConfigurationProto";
+
+/**
+ * Protocol Buffers schema for SolveConfiguration (T050).
+ *
+ * This defines the wire format for persisting and transmitting
+ * poker solve configurations.
+ */
+
+message SolveConfigurationPb {
+  // Unique identifier
+  string config_id = 1;
+
+  // Display name for this configuration
+  string name = 2;
+
+  // Number of players (2-6)
+  int32 num_players = 3;
+
+  // Stack sizes keyed by position
+  map<string, double> stack_sizes = 4;
+
+  // Starting position (BTN, SB, BB, etc.)
+  string starting_position = 5;
+
+  // Convergence criteria
+  ConvergenceCriteriaPb convergence_criteria = 6;
+
+  // Bet sizing scheme
+  BetSizingSchemePb bet_sizing_scheme = 7;
+
+  // Hand abstraction configuration
+  HandAbstractionPb hand_abstraction = 8;
+
+  // Timestamps
+  int64 created_at_epoch_millis = 9;
+  int64 updated_at_epoch_millis = 10;
+}
+
+/**
+ * Convergence criteria for when to stop solving.
+ */
+message ConvergenceCriteriaPb {
+  // Target exploitability as percentage of pot (0.01% to 5%)
+  double target_exploitability = 1;
+
+  // Maximum number of CFR+ iterations
+  int64 max_iterations = 2;
+
+  // How often to calculate exploitability (in iterations)
+  int32 evaluation_frequency = 3;
+
+  // Optional timeout in hours
+  optional int32 timeout_hours = 4;
+}
+
+/**
+ * Bet sizing scheme (discretized bet options).
+ */
+message BetSizingSchemePb {
+  repeated BetSizePb sizes = 1;
+}
+
+/**
+ * Individual bet size option.
+ */
+message BetSizePb {
+  oneof size_type {
+    double pot_relative = 1;  // Multiplier of pot (e.g., 0.5 = half pot)
+    bool all_in = 2;           // All-in option (true if this is ALL_IN)
+  }
+}
+
+/**
+ * Hand abstraction configuration.
+ */
+message HandAbstractionPb {
+  // Number of buckets for each street
+  int32 preflop_buckets = 1;
+  int32 flop_buckets = 2;
+  int32 turn_buckets = 3;
+  int32 river_buckets = 4;
+}
