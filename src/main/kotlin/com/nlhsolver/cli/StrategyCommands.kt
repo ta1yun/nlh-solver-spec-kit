@@ -1,0 +1,433 @@
+package com.nlhsolver.cli
+
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.subcommands
+import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.*
+import com.github.ajalt.clikt.parameters.types.double
+import com.nlhsolver.core.PokerGameState
+import com.nlhsolver.core.PokerPlayerState
+import com.nlhsolver.poker.*
+import com.nlhsolver.solver.StrategyQueryService
+import com.nlhsolver.storage.StrategyRepository
+import java.util.UUID
+
+/**
+ * Strategy command group (T076).
+ *
+ * Subcommands:
+ * - list: List all solved strategies
+ * - show: Show strategy details
+ * - query: Query strategy for a game state
+ */
+class StrategyCommand : CliktCommand(
+    name = "strategy",
+    help = "Manage and query solved strategies"
+) {
+    init {
+        subcommands(
+            StrategyListCommand(),
+            StrategyShowCommand(),
+            StrategyQueryCommand(),
+            StrategyHandCommand(),
+            StrategyRangeCommand()
+        )
+    }
+
+    override fun run() {}
+}
+
+/**
+ * Query strategy (T076).
+ */
+class StrategyQueryCommand : CliktCommand(
+    name = "query",
+    help = "Query strategy for a game state"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val street by option("--street", help = "Street (PREFLOP, FLOP, TURN, RIVER)").required()
+    private val board by option("--board", help = "Board cards (e.g., 'AsKdQh')").default("")
+    private val pot by option("--pot", help = "Pot size in big blinds").double().required()
+    private val position by option("--position", help = "Player position").required()
+    private val stack by option("--stack", help = "Player stack in big blinds").double().default(100.0)
+    private val json by option("--json", help = "Output in JSON format").flag()
+
+    override fun run() {
+        val repository = StrategyRepository()
+        val queryService = StrategyQueryService(repository)
+
+        try {
+            val id = UUID.fromString(strategyId)
+
+            // Parse street
+            val streetEnum = Street.valueOf(street.uppercase())
+
+            // Parse board cards
+            val boardCards = if (board.isNotEmpty()) {
+                parseBoardCards(board)
+            } else {
+                emptyList()
+            }
+
+            // Parse position
+            val positionEnum = Position.valueOf(position.uppercase())
+
+            // Build game state
+            val gameState = PokerGameState(
+                street = streetEnum,
+                board = boardCards,
+                pot = pot,
+                playerStates = mapOf(
+                    positionEnum to PokerPlayerState(
+                        position = positionEnum,
+                        stackBb = stack,
+                        investedThisRound = 0.0
+                    )
+                ),
+                actionHistory = emptyList()
+            )
+
+            // Query strategy
+            val result = queryService.query(id, gameState)
+
+            val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
+            echo(OutputFormatter.formatStrategyQuery(result, format))
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Strategy query failed"))
+        }
+    }
+
+    private fun parseBoardCards(boardStr: String): List<Card> {
+        // Parse cards like "AsKdQh" into list of Card objects
+        val cards = mutableListOf<Card>()
+        var i = 0
+
+        while (i < boardStr.length) {
+            if (i + 1 >= boardStr.length) {
+                throw IllegalArgumentException("Invalid board format: $boardStr")
+            }
+
+            val rankChar = boardStr[i].uppercaseChar()
+            val suitChar = boardStr[i + 1].lowercaseChar()
+
+            val rank = parseRank(rankChar)
+            val suit = parseSuit(suitChar)
+
+            cards.add(Card(rank, suit))
+            i += 2
+        }
+
+        return cards
+    }
+
+    private fun parseRank(rankChar: Char): Rank {
+        return when (rankChar) {
+            'A' -> Rank.ACE
+            'K' -> Rank.KING
+            'Q' -> Rank.QUEEN
+            'J' -> Rank.JACK
+            'T' -> Rank.TEN
+            '9' -> Rank.NINE
+            '8' -> Rank.EIGHT
+            '7' -> Rank.SEVEN
+            '6' -> Rank.SIX
+            '5' -> Rank.FIVE
+            '4' -> Rank.FOUR
+            '3' -> Rank.THREE
+            '2' -> Rank.TWO
+            else -> throw IllegalArgumentException("Invalid rank: $rankChar")
+        }
+    }
+
+    private fun parseSuit(suitChar: Char): Suit {
+        return when (suitChar) {
+            's' -> Suit.SPADES
+            'h' -> Suit.HEARTS
+            'd' -> Suit.DIAMONDS
+            'c' -> Suit.CLUBS
+            else -> throw IllegalArgumentException("Invalid suit: $suitChar")
+        }
+    }
+}
+
+/**
+ * List all solved strategies.
+ */
+class StrategyListCommand : CliktCommand(
+    name = "list",
+    help = "List all solved strategies"
+) {
+    private val json by option("--json", help = "Output in JSON format").flag()
+
+    override fun run() {
+        val repository = StrategyRepository()
+
+        try {
+            val strategies = repository.findAll()
+
+            if (strategies.isEmpty()) {
+                echo("No strategies found.")
+                return
+            }
+
+            val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
+            echo(OutputFormatter.formatStrategyList(strategies, format))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Failed to list strategies"))
+        }
+    }
+}
+
+/**
+ * Show strategy details.
+ */
+class StrategyShowCommand : CliktCommand(
+    name = "show",
+    help = "Show strategy details"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val json by option("--json", help = "Output in JSON format").flag()
+    private val verbose by option("-v", "--verbose", help = "Show detailed statistics").flag()
+    private val full by option("--full", help = "Show complete strategy breakdown by info set").flag()
+    private val limit by option("--limit", help = "Limit number of info sets shown (default: all)").convert { it.toInt() }
+
+    override fun run() {
+        val repository = StrategyRepository()
+
+        try {
+            val id = UUID.fromString(strategyId)
+            val strategy = repository.findById(id)
+                ?: throw IllegalArgumentException("Strategy $strategyId not found")
+
+            // Load full strategy data if verbose or full is requested
+            val coreStrategy = if (verbose || full) {
+                repository.loadStrategyData(id)
+            } else {
+                null
+            }
+
+            val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
+
+            if (full) {
+                echo(OutputFormatter.formatFullStrategy(strategy, coreStrategy, limit, format))
+            } else {
+                echo(OutputFormatter.formatStrategyDetails(strategy, coreStrategy, format))
+            }
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Failed to show strategy"))
+        }
+    }
+}
+
+/**
+ * Query strategy by canonical hand notation (Phase 2.5 - T203, T219).
+ *
+ * Example: nlhsolver strategy hand <strategy-id> --hand AKs --position BTN
+ * Example: nlhsolver strategy hand <strategy-id> --hand AKs --position BTN --street FLOP --board Ks7h2d
+ */
+class StrategyHandCommand : CliktCommand(
+    name = "hand",
+    help = "Query strategy for a canonical hand (e.g., AKs, QQ, 72o)"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val hand by option("--hand", "-h", help = "Hand notation (e.g., AKs, QQ, 72o)").required()
+    private val position by option("--position", "-p", help = "Position (BTN or BB)").default("BTN")
+    private val street by option("--street", "-s", help = "Street (PREFLOP, FLOP)").default("PREFLOP")
+    private val board by option("--board", "-b", help = "Board cards (e.g., 'Ks7h2d')").default("")
+    private val json by option("--json", help = "Output in JSON format").flag()
+
+    override fun run() {
+        val repository = StrategyRepository()
+        val queryService = StrategyQueryService(repository)
+
+        try {
+            val id = UUID.fromString(strategyId)
+            val positionEnum = Position.valueOf(position.uppercase())
+            val streetEnum = Street.valueOf(street.uppercase())
+
+            // Parse board cards if provided
+            val boardCards = if (board.isNotEmpty()) {
+                parseBoardCards(board)
+            } else {
+                emptyList()
+            }
+
+            // Validate board for flop
+            if (streetEnum == Street.FLOP && boardCards.size != 3) {
+                echo(OutputFormatter.formatError("Flop requires exactly 3 board cards. Use --board Ks7h2d"))
+                return
+            }
+
+            val result = queryService.queryByCanonicalHand(id, hand, positionEnum, streetEnum, boardCards)
+
+            val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
+            echo(OutputFormatter.formatCanonicalHandQuery(result, format))
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Hand query failed"))
+        }
+    }
+
+    private fun parseBoardCards(boardStr: String): List<Card> {
+        val cards = mutableListOf<Card>()
+        var i = 0
+
+        while (i < boardStr.length) {
+            if (i + 1 >= boardStr.length) {
+                throw IllegalArgumentException("Invalid board format: $boardStr")
+            }
+
+            val rankChar = boardStr[i].uppercaseChar()
+            val suitChar = boardStr[i + 1].lowercaseChar()
+
+            val rank = parseRank(rankChar)
+            val suit = parseSuit(suitChar)
+
+            cards.add(Card(rank, suit))
+            i += 2
+        }
+
+        return cards
+    }
+
+    private fun parseRank(rankChar: Char): Rank {
+        return when (rankChar) {
+            'A' -> Rank.ACE
+            'K' -> Rank.KING
+            'Q' -> Rank.QUEEN
+            'J' -> Rank.JACK
+            'T' -> Rank.TEN
+            '9' -> Rank.NINE
+            '8' -> Rank.EIGHT
+            '7' -> Rank.SEVEN
+            '6' -> Rank.SIX
+            '5' -> Rank.FIVE
+            '4' -> Rank.FOUR
+            '3' -> Rank.THREE
+            '2' -> Rank.TWO
+            else -> throw IllegalArgumentException("Invalid rank: $rankChar")
+        }
+    }
+
+    private fun parseSuit(suitChar: Char): Suit {
+        return when (suitChar) {
+            's' -> Suit.SPADES
+            'h' -> Suit.HEARTS
+            'd' -> Suit.DIAMONDS
+            'c' -> Suit.CLUBS
+            else -> throw IllegalArgumentException("Invalid suit: $suitChar")
+        }
+    }
+}
+
+/**
+ * Display full range as 13x13 grid (Phase 2.5 - T204, T219).
+ *
+ * Example: nlhsolver strategy range <strategy-id> --position BTN
+ * Example: nlhsolver strategy range <strategy-id> --position BTN --street FLOP --board Ks7h2d
+ */
+class StrategyRangeCommand : CliktCommand(
+    name = "range",
+    help = "Display full range as 13x13 grid"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val position by option("--position", "-p", help = "Position (BTN or BB)").default("BTN")
+    private val street by option("--street", "-s", help = "Street (PREFLOP, FLOP)").default("PREFLOP")
+    private val board by option("--board", "-b", help = "Board cards (e.g., 'Ks7h2d')").default("")
+    private val json by option("--json", help = "Output in JSON format").flag()
+
+    override fun run() {
+        val repository = StrategyRepository()
+        val queryService = StrategyQueryService(repository)
+
+        try {
+            val id = UUID.fromString(strategyId)
+            val positionEnum = Position.valueOf(position.uppercase())
+            val streetEnum = Street.valueOf(street.uppercase())
+
+            // Parse board cards if provided
+            val boardCards = if (board.isNotEmpty()) {
+                parseBoardCards(board)
+            } else {
+                emptyList()
+            }
+
+            // Validate board for flop
+            if (streetEnum == Street.FLOP && boardCards.size != 3) {
+                echo(OutputFormatter.formatError("Flop requires exactly 3 board cards. Use --board Ks7h2d"))
+                return
+            }
+
+            val streetLabel = if (streetEnum == Street.PREFLOP) "preflop" else "flop (${formatBoard(boardCards)})"
+            echo("Loading $streetLabel range for $positionEnum...")
+            val rangeResults = queryService.queryFullRange(id, positionEnum, streetEnum, boardCards)
+
+            val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
+            echo(OutputFormatter.formatPreflopRange(rangeResults, positionEnum, format))
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Range query failed"))
+        }
+    }
+
+    private fun parseBoardCards(boardStr: String): List<Card> {
+        val cards = mutableListOf<Card>()
+        var i = 0
+
+        while (i < boardStr.length) {
+            if (i + 1 >= boardStr.length) {
+                throw IllegalArgumentException("Invalid board format: $boardStr")
+            }
+
+            val rankChar = boardStr[i].uppercaseChar()
+            val suitChar = boardStr[i + 1].lowercaseChar()
+
+            val rank = parseRank(rankChar)
+            val suit = parseSuit(suitChar)
+
+            cards.add(Card(rank, suit))
+            i += 2
+        }
+
+        return cards
+    }
+
+    private fun parseRank(rankChar: Char): Rank {
+        return when (rankChar) {
+            'A' -> Rank.ACE
+            'K' -> Rank.KING
+            'Q' -> Rank.QUEEN
+            'J' -> Rank.JACK
+            'T' -> Rank.TEN
+            '9' -> Rank.NINE
+            '8' -> Rank.EIGHT
+            '7' -> Rank.SEVEN
+            '6' -> Rank.SIX
+            '5' -> Rank.FIVE
+            '4' -> Rank.FOUR
+            '3' -> Rank.THREE
+            '2' -> Rank.TWO
+            else -> throw IllegalArgumentException("Invalid rank: $rankChar")
+        }
+    }
+
+    private fun parseSuit(suitChar: Char): Suit {
+        return when (suitChar) {
+            's' -> Suit.SPADES
+            'h' -> Suit.HEARTS
+            'd' -> Suit.DIAMONDS
+            'c' -> Suit.CLUBS
+            else -> throw IllegalArgumentException("Invalid suit: $suitChar")
+        }
+    }
+
+    private fun formatBoard(cards: List<Card>): String {
+        return cards.joinToString("") { "${it.rank.symbol}${it.suit.symbol}" }
+    }
+}
