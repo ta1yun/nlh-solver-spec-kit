@@ -17,30 +17,48 @@ This document provides an executable task breakdown for implementing the NLH Pok
 
 ## Implementation Strategy
 
-### MVP Scope (User Story 1 Only)
+### Phased Solver Development
 
-The Minimum Viable Product includes **ONLY User Story 1** - Basic Heads-Up Solve Configuration. This delivers:
-- Core CFR+ solver engine
-- Heads-up (2-player) configuration and solving
-- Strategy query capability
-- Both CLI and REST API interfaces
+The solver is developed incrementally to validate correctness before optimization:
+
+**Phase 2.5: Preflop No-Abstraction** (6 tasks)
+- Upgrade from 20 sampled hands to all 169 canonical hands
+- Validates CFR implementation at full preflop scale
+- Output: Preflop-only strategies (not postflop-aware, but correct)
+
+**Phase 2.6: Preflop + Flop Verification** (12 tasks)
+- Single fixed board (e.g., K♠7♥2♦), all 169 hands
+- Validates multi-street CFR before building abstractions
+- Output: Preflop + Flop strategies for one board texture
+
+**Phase 2.7: Abstraction Development** (14 tasks)
+- Board isomorphism: 22,100 flops → 1,755 canonical
+- Progressive hand bucketing: 1,100 combos → 50-100 buckets
+- Output: Abstraction layer enabling tractable full tree
+
+**Why this phased approach**:
+- Preflop-only solving is a "toy game" (doesn't account for postflop play)
+- Accurate preflop ranges emerge from full game tree solving
+- Building abstractions before validation risks masking bugs
+- Each phase has clear, measurable success criteria
+
+### MVP Scope (Full Game Tree)
+
+The MVP includes Phases 2.5-2.7 plus User Story 1 with full game tree:
+- Complete preflop → flop → turn → river solver
+- CFR+ with convergence to <0.5% exploitability
+- Board isomorphism and hand bucketing for tractability
+- CLI and REST API interfaces
 - File-based persistence
 
-**MVP Task Count**: ~55 tasks
-**Estimated Effort**: 6-8 weeks
-
-**Why this is sufficient**:
-- Validates core algorithm implementation
-- Proves performance goals are achievable
-- Provides immediate value to users (heads-up is most common use case)
-- Establishes foundation for all other stories
+**MVP Task Count**: ~87 tasks (32 new + 55 existing)
 
 ### Incremental Delivery
 
 After MVP, deliver remaining stories independently:
-- **User Story 2** (Multi-Player): Extends to 3-6 players (~10 tasks, 1-2 weeks)
-- **User Story 3** (Background/Remote): Adds async execution (~15 tasks, 2-3 weeks)
-- **User Story 4** (Progress Monitoring): Enhances UX (~8 tasks, 1 week)
+- **User Story 2** (Multi-Player): Extends to 3-6 players (~10 tasks)
+- **User Story 3** (Background/Remote): Adds async execution (~15 tasks)
+- **User Story 4** (Progress Monitoring): Enhances UX (~8 tasks)
 
 ---
 
@@ -52,7 +70,22 @@ Phase 1: Setup
 Phase 2: Foundational (Poker Domain)
    ↓
 ┌──────────────────────────────────────────┐
-│  Phase 3: User Story 1 (P1) - CRITICAL   │ ← MVP
+│  Phase 2.5: Preflop No-Abstraction       │ ← Verify CFR with all 169 hands
+│  Upgrade from 20 sampled to full range   │
+└──────────────────────────────────────────┘
+   ↓
+┌──────────────────────────────────────────┐
+│  Phase 2.6: Preflop + Flop Verification  │ ← Verify multi-street CFR
+│  Single board, all hands, limited sizing │
+└──────────────────────────────────────────┘
+   ↓
+┌──────────────────────────────────────────┐
+│  Phase 2.7: Abstraction Development      │ ← Enable full tree
+│  Board isomorphism + hand bucketing      │
+└──────────────────────────────────────────┘
+   ↓
+┌──────────────────────────────────────────┐
+│  Phase 3: User Story 1 (P1) - CRITICAL   │ ← MVP (Full Game Tree)
 │  Basic Heads-Up Solve Configuration      │
 └──────────────────────────────────────────┘
    ↓
@@ -78,6 +111,12 @@ Phase 7: Polish & Cross-Cutting Concerns
 - Stories 2, 3, 4 are **independent** of each other
 - All depend on Story 1 (MVP)
 - Stories 3 and 4 can be developed in parallel after Story 1
+
+**Phased Solver Development**:
+- Phase 2.5 validates CFR implementation with no hand abstraction (preflop only)
+- Phase 2.6 validates multi-street CFR before building abstractions
+- Phase 2.7 builds abstractions required for tractable full game tree
+- This approach ensures correctness before optimization
 
 ---
 
@@ -122,6 +161,109 @@ Phase 7: Polish & Cross-Cutting Concerns
 - [X] T022 Implement suit isomorphism detection in src/main/kotlin/com/nlhsolver/poker/SuitIsomorphism.kt (canonical board representation)
 
 **Completion Criteria**: Hand evaluator correctly ranks poker hands; equity calculator produces accurate results for sample scenarios.
+
+---
+
+## Phase 2.5: Preflop No-Abstraction (All 169 Hands)
+
+**Goal**: Upgrade preflop solver from 20 sampled hands to full range-based CFR over all 169 canonical hands. This validates CFR correctness without hand abstraction.
+
+**Why**: Preflop-only with 20 sampled hands is a "toy game". Using all 169 hands produces more meaningful (though still not postflop-aware) strategies and validates the CFR implementation at scale.
+
+**Tasks**: 6 ✅ COMPLETE
+
+- [x] T200 [P2.5] Refactor StartingHandSampler to iterate all 169 canonical hands in src/main/kotlin/com/nlhsolver/core/StartingHandSampler.kt
+- [x] T201 [P2.5] Implement combo weighting in CFR iterations (6 for pairs, 4 suited, 12 offsuit) in src/main/kotlin/com/nlhsolver/solver/SolveOrchestrator.kt
+- [x] T202 [P2.5] Add range-based strategy storage (strategy per canonical hand type) in src/main/kotlin/com/nlhsolver/solver/StrategyQueryService.kt
+- [x] T203 [P2.5] Update strategy query to return strategies by canonical hand notation (e.g., "AKs", "QQ") in StrategyQueryService
+- [x] T204 [P2.5] Add preflop range visualization in CLI output (grid format) in src/main/kotlin/com/nlhsolver/cli/OutputFormatter.kt
+- [x] T205 [P2.5] Verify CFR convergence with all 169 hands (exploitability test) in src/test/kotlin/com/nlhsolver/integration/PreflopConvergenceTest.kt
+
+**Completion Criteria**: ✅ MET
+- CFR iterates over all 169 × 169 valid hand matchups (~28K scenarios)
+- Exploitability convergence verified in PreflopConvergenceTest
+- Strategy query returns action frequencies for any canonical hand via `strategy hand` command
+- Range visualization available via `strategy range` command
+
+---
+
+## Phase 2.6: Preflop + Flop Verification
+
+**Goal**: Extend solver to handle preflop → flop transitions. Use a single fixed board and all 169 hands to verify multi-street CFR before building abstractions.
+
+**Why**: Accurate preflop ranges require postflop continuation. This phase validates CFR works across street transitions without the complexity of board abstraction.
+
+**Constraints for tractability (no abstraction yet)**:
+- Single flop texture (e.g., K♠7♥2♦)
+- All 169 preflop hands
+- Limited bet sizes (50%, 100% pot)
+- ~22K hand matchups × 1 board = tractable
+
+**Tasks**: 12 ✅ COMPLETE
+
+### Flop Game State
+- [x] T210 [P2.6] Extend PokerGameState to track board cards in src/main/kotlin/com/nlhsolver/core/PokerGameState.kt
+- [x] T211 [P2.6] Add flop dealing logic in GameTreeBuilder (fixed board for Phase 2.6) in src/main/kotlin/com/nlhsolver/core/GameTreeBuilder.kt
+- [x] T212 [P2.6] Implement card removal for hand ranges after board is dealt in src/main/kotlin/com/nlhsolver/core/StartingHandSampler.kt
+
+### Flop Action Tree
+- [x] T213 [P2.6] Add flop action nodes (check, bet, raise, fold, all-in) in PokerGameState.getLegalActions()
+- [x] T214 [P2.6] Implement position-aware action order for flop (OOP acts first) in PokerGameState.currentPlayer()
+- [x] T215 [P2.6] Add pot/stack updates through street transitions in PokerGameState.transitionToNextStreet()
+
+### Multi-Street CFR
+- [x] T216 [P2.6] Extend CFR traversal to handle street transitions (preflop → flop) in PokerGameState.applyAction()
+- [x] T217 [P2.6] Implement flop showdown/equity evaluation for all-in scenarios in PokerGameState.getUtility()
+- [x] T218 [P2.6] Add regret/strategy storage keyed by (street, board, hand, action_history) in PokerGameState.getInfoSet()
+
+### Verification & CLI
+- [x] T219 [P2.6] Add `--board` flag to strategy query CLI command in src/main/kotlin/com/nlhsolver/cli/StrategyCommands.kt
+- [x] T220 [P2.6] Implement flop strategy display (action frequencies by position) in OutputFormatter
+- [x] T221 [P2.6] Create multi-street convergence test in src/test/kotlin/com/nlhsolver/integration/FlopConvergenceTest.kt
+
+**Completion Criteria**: ✅ ALL COMPLETE
+- Solver handles preflop → flop game tree with fixed board K♠7♥2♦
+- CFR creates info sets on both streets (tested: 153 preflop, 765 flop)
+- Card removal filters ~18K valid matchups from 28K total
+- Street transitions work automatically via applyAction()
+
+---
+
+## Phase 2.7: Abstraction Development
+
+**Goal**: Build the abstraction layers required for tractable full game tree solving: board isomorphism and progressive hand bucketing.
+
+**Why**: Full game tree (preflop → flop → turn → river) is intractable without abstraction. These techniques reduce complexity by 10-100x while preserving solution quality.
+
+**Tasks**: 14
+
+### Board Isomorphism
+- [ ] T230 [P2.7] Implement suit canonicalization for boards in src/main/kotlin/com/nlhsolver/poker/BoardCanonicalizer.kt
+- [ ] T231 [P2.7] Create canonical board → original board mapping for result translation in BoardCanonicalizer
+- [ ] T232 [P2.7] Implement hand suit remapping to match canonical board in src/main/kotlin/com/nlhsolver/poker/HandCanonicalizer.kt
+- [ ] T233 [P2.7] Add isomorphism reduction to GameTreeBuilder (deduplicate equivalent boards) in GameTreeBuilder
+- [ ] T234 [P2.7] Verify isomorphism correctness: solve same board with different suit permutations, compare strategies
+
+### Turn/River Board Clustering
+- [ ] T235 [P2.7] Implement turn card clustering (group by texture change: flush draw completes, pair, blank) in src/main/kotlin/com/nlhsolver/poker/TurnClustering.kt
+- [ ] T236 [P2.7] Implement river card clustering (group by final hand strength distribution) in src/main/kotlin/com/nlhsolver/poker/RiverClustering.kt
+- [ ] T237 [P2.7] Add configurable cluster count for turn/river (default: 10-15 clusters per street)
+
+### Progressive Hand Bucketing
+- [ ] T238 [P2.7] Implement flop hand bucketing by equity + draw potential in src/main/kotlin/com/nlhsolver/poker/FlopHandBucketing.kt
+- [ ] T239 [P2.7] Implement turn hand bucketing (equity against opponent range) in src/main/kotlin/com/nlhsolver/poker/TurnHandBucketing.kt
+- [ ] T240 [P2.7] Implement river hand bucketing (pure showdown equity) in src/main/kotlin/com/nlhsolver/poker/RiverHandBucketing.kt
+- [ ] T241 [P2.7] Add configurable bucket counts per street (default: 50 flop, 30 turn, 20 river)
+
+### Integration & Verification
+- [ ] T242 [P2.7] Integrate board isomorphism + hand bucketing into GameTreeBuilder
+- [ ] T243 [P2.7] Benchmark abstraction quality: compare solve results with/without abstraction on test scenarios
+
+**Completion Criteria**:
+- Board isomorphism reduces flop count from 22,100 → ~1,755 canonical boards
+- Hand bucketing reduces per-street hand combos from 1,100 → 50-100 buckets
+- Abstracted game tree fits in <8GB RAM for full preflop→river tree
+- Benchmark shows <5% strategy deviation vs no-abstraction baseline on test boards
 
 ---
 
@@ -430,28 +572,61 @@ T111, T112, T113, T114, T115, T116, T117, T118, T119, T120, T121
 
 ## Task Summary by User Story
 
-| User Story | Priority | Tasks | Parallelizable | Estimated Effort |
-|------------|----------|-------|----------------|------------------|
-| Setup | - | 12 | 9 | 1 week |
-| Foundational | - | 10 | 6 | 1 week |
-| **US1: Basic Heads-Up Solve** | **P1** | **55** | **27** | **6-8 weeks (MVP)** |
-| US2: Multi-Player Support | P2 | 10 | 5 | 1-2 weeks |
-| US3: Background/Remote | P3 | 15 | 7 | 2-3 weeks |
-| US4: Progress Monitoring | P3 | 8 | 6 | 1 week |
-| Polish | - | 13 | 11 | 1 week |
-| **TOTAL** | - | **123** | **71** | **12-16 weeks** |
+| Phase | Priority | Tasks | Parallelizable | Description |
+|-------|----------|-------|----------------|-------------|
+| Setup | - | 12 | 9 | Project initialization |
+| Foundational | - | 10 | 6 | Poker domain models |
+| **P2.5: Preflop No-Abstraction** | **P1** | **6** | **3** | **All 169 hands, verify CFR** |
+| **P2.6: Preflop + Flop** | **P1** | **12** | **6** | **Multi-street CFR verification** |
+| **P2.7: Abstractions** | **P1** | **14** | **8** | **Board/hand abstraction for full tree** |
+| **US1: Full Game Tree MVP** | **P1** | **55** | **27** | **Complete heads-up solver** |
+| US2: Multi-Player Support | P2 | 10 | 5 | 3-6 player extension |
+| US3: Background/Remote | P3 | 15 | 7 | Async/remote execution |
+| US4: Progress Monitoring | P3 | 8 | 6 | Real-time progress |
+| Polish | - | 13 | 11 | Error handling, docs |
+| **TOTAL** | - | **155** | **88** | - |
+
+### Phased Development Milestones
+
+| Milestone | Validates | Memory | Time |
+|-----------|-----------|--------|------|
+| Phase 2.5 Complete | CFR at scale (169 hands preflop) | ~50MB | seconds |
+| Phase 2.6 Complete | Multi-street CFR (preflop + flop) | ~500MB | minutes |
+| Phase 2.7 Complete | Abstraction correctness | ~2GB | minutes |
+| Phase 3 Complete | Full game tree MVP | ~8-16GB | hours |
 
 ---
 
-## MVP Delivery (User Story 1 Only)
+## MVP Delivery (Phased Approach)
 
-**Tasks**: T001-T077 (77 tasks total)
-**Estimated Effort**: 8-10 weeks
+### Phase 2.5: Preflop No-Abstraction
+**Tasks**: T200-T205 (6 tasks)
 **Deliverables**:
-- Functional heads-up poker solver (2-player)
-- CFR+ algorithm with convergence to <0.5% exploitability
+- CFR over all 169 canonical hands (not 20 sampled)
+- Preflop range visualization
+- Validates CFR implementation at scale
+
+### Phase 2.6: Preflop + Flop Verification
+**Tasks**: T210-T221 (12 tasks)
+**Deliverables**:
+- Multi-street game tree (preflop → flop)
+- Flop strategy queries with board parameter
+- Validates CFR across street transitions
+
+### Phase 2.7: Abstraction Development
+**Tasks**: T230-T243 (14 tasks)
+**Deliverables**:
+- Board isomorphism (22,100 → 1,755 flops)
+- Progressive hand bucketing (50-100 buckets per street)
+- Enables tractable full game tree
+
+### Phase 3: Full Game Tree MVP
+**Tasks**: T023-T077 (55 tasks)
+**Deliverables**:
+- Full preflop → flop → turn → river solver
+- CFR+ with convergence to <0.5% exploitability
 - CLI and REST API interfaces
-- Strategy query capability
+- Strategy query for any game state
 - File-based persistence with Protocol Buffers
 
 **Post-MVP**: Deliver US2, US3, US4 independently as incremental enhancements.

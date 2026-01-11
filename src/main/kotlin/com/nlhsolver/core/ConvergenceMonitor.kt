@@ -120,8 +120,92 @@ class ConvergenceMonitor(
             iterationsSinceImprovement++
         }
 
-        // Check exploitability threshold
-        if (exploitability <= criteria.targetExploitability) {
+        // Check exploitability threshold (but not if exploitability is invalid)
+        if (exploitability <= criteria.targetExploitability &&
+            !exploitability.isNaN() &&
+            !exploitability.isInfinite() &&
+            exploitability >= 0.0) {
+            return ConvergenceStatus.Converged(
+                reason = ConvergenceReason.EXPLOITABILITY_THRESHOLD,
+                finalExploitability = exploitability,
+                iterations = currentIteration,
+                elapsedSeconds = elapsedSeconds
+            )
+        }
+
+        return ConvergenceStatus.NotConverged
+    }
+
+    /**
+     * Check convergence with a pre-calculated exploitability value.
+     *
+     * This is useful when exploitability is computed externally (e.g., averaged across multiple scenarios).
+     *
+     * @param currentIteration Current CFR iteration number
+     * @param exploitability Pre-calculated exploitability value
+     * @return ConvergenceStatus indicating whether to continue or stop
+     */
+    fun checkConvergenceWithExploitability(
+        currentIteration: Int,
+        exploitability: Double
+    ): ConvergenceStatus {
+        val now = Instant.now()
+        val start = startTime ?: error("ConvergenceMonitor not started")
+        val elapsedSeconds = java.time.Duration.between(start, now).seconds
+
+        // Check time limit first (cheap check)
+        if (criteria.timeoutHours != null) {
+            val maxTimeSeconds = criteria.timeoutHours * 3600L
+            if (elapsedSeconds >= maxTimeSeconds) {
+                return ConvergenceStatus.Converged(
+                    reason = ConvergenceReason.TIME_LIMIT,
+                    finalExploitability = exploitability,
+                    iterations = currentIteration,
+                    elapsedSeconds = elapsedSeconds
+                )
+            }
+        }
+
+        // Check iteration limit (cheap check)
+        if (currentIteration >= criteria.maxIterations) {
+            return ConvergenceStatus.Converged(
+                reason = ConvergenceReason.MAX_ITERATIONS,
+                finalExploitability = exploitability,
+                iterations = currentIteration,
+                elapsedSeconds = elapsedSeconds
+            )
+        }
+
+        // Check if it's time for an exploitability check
+        val shouldCheck = (currentIteration - lastCheckIteration >= criteria.evaluationFrequency)
+
+        if (!shouldCheck) {
+            return ConvergenceStatus.NotConverged
+        }
+
+        // Record checkpoint
+        lastCheckIteration = currentIteration
+        exploitabilityHistory.add(
+            ExploitabilityCheckpoint(
+                iteration = currentIteration,
+                exploitability = exploitability,
+                timestamp = now
+            )
+        )
+
+        // Check if exploitability improved
+        if (exploitability < bestExploitability) {
+            bestExploitability = exploitability
+            iterationsSinceImprovement = 0
+        } else {
+            iterationsSinceImprovement++
+        }
+
+        // Check exploitability threshold (but not if exploitability is invalid)
+        if (exploitability <= criteria.targetExploitability &&
+            !exploitability.isNaN() &&
+            !exploitability.isInfinite() &&
+            exploitability >= 0.0) {
             return ConvergenceStatus.Converged(
                 reason = ConvergenceReason.EXPLOITABILITY_THRESHOLD,
                 finalExploitability = exploitability,

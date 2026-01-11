@@ -36,9 +36,9 @@ object ConfigurationValidator {
             errors.add("VR-003: Starting position ${config.startingPosition} is not valid for ${config.numPlayers} players")
         }
 
-        // VR-004: If maxIterations is set, must be > 1000
-        if (config.convergenceCriteria.maxIterations <= 1000) {
-            errors.add("VR-004: Maximum iterations must be > 1000, but is ${config.convergenceCriteria.maxIterations}")
+        // VR-004: If maxIterations is set, must be >= 50
+        if (config.convergenceCriteria.maxIterations < 50) {
+            errors.add("VR-004: Maximum iterations must be >= 50, but is ${config.convergenceCriteria.maxIterations}")
         }
 
         // VR-005: Bet sizing scheme must contain at least 1 pot-relative multiplier and ALL_IN

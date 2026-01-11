@@ -154,6 +154,32 @@ class InfoSetStrategy(
     fun getVisitCount(): Long = visitCount
 
     /**
+     * Restore cumulative strategy from saved average strategy data.
+     *
+     * This is used when loading a strategy from disk. Since we only save
+     * the average strategy (not the cumulative sum), we reconstruct it
+     * by multiplying by a large weight to preserve the probabilities.
+     *
+     * @param averageStrategy The saved average strategy probabilities
+     * @param visitCount The saved visit count
+     */
+    fun restoreFromAverageStrategy(averageStrategy: DoubleArray, visitCount: Long) {
+        require(averageStrategy.size == numActions) {
+            "Average strategy size ${averageStrategy.size} must match numActions $numActions"
+        }
+
+        // Restore cumulative strategy
+        // We use a large weight to ensure proper normalization
+        val weight = 1000.0 * visitCount
+        for (i in 0 until numActions) {
+            cumulativeStrategy[i] = averageStrategy[i] * weight
+        }
+
+        // Restore visit count
+        this.visitCount = visitCount
+    }
+
+    /**
      * Get a summary of this info set's state.
      */
     override fun toString(): String {

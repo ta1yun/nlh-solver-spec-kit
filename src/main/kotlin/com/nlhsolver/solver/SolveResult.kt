@@ -33,8 +33,8 @@ data class SolveResult(
         require(iterationsRun > 0) {
             "Iterations run must be positive"
         }
-        require(executionTimeSeconds > 0) {
-            "Execution time must be positive"
+        require(executionTimeSeconds >= 0) {
+            "Execution time must be non-negative"
         }
 
         // VR-013: converged = true implies completionType = CONVERGED

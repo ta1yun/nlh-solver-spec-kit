@@ -21,8 +21,8 @@ data class ConvergenceCriteria(
         require(targetExploitability in 0.01..5.0) {
             "Target exploitability must be between 0.01% and 5%"
         }
-        require(maxIterations >= 1000) {
-            "Maximum iterations must be at least 1000"
+        require(maxIterations >= 50) {
+            "Maximum iterations must be at least 50"
         }
         require(evaluationFrequency in 100..100_000) {
             "Evaluation frequency must be between 100 and 100,000"

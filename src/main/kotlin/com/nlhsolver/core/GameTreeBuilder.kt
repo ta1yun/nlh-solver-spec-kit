@@ -62,8 +62,18 @@ class GameTreeBuilder(
             return GameTreeNode.terminal(state)
         }
 
-        // Base case 2: Maximum depth reached (shouldn't happen for poker)
-        if (depth > 10) {
+        // Base case 2: Maximum depth reached (safety check to prevent infinite recursion)
+        // For MVP, use very limited depth to keep game tree manageable
+        // With 2 raises per street max and 4 streets, theoretical max is ~8-10 actions
+        // TODO: Implement proper game tree abstraction for deeper trees
+        if (depth > 8) {
+            return GameTreeNode.terminal(state)
+        }
+
+        // Base case 3: All players are all-in (no more decisions, just deal to showdown)
+        val playersWhoCanAct = state.playerStates.values.count { it.canAct() }
+        if (playersWhoCanAct == 0) {
+            // All players are all-in or folded - this is terminal
             return GameTreeNode.terminal(state)
         }
 
@@ -76,43 +86,52 @@ class GameTreeBuilder(
 
     /**
      * Checks if we need a chance node (to deal cards).
+     *
+     * Phase 2.6: Enabled for preflop -> flop transition.
      */
     private fun needsChanceNode(state: PokerGameState): Boolean {
-        // If action history shows last action was call/check and we need to advance street
-        val lastAction = state.actionHistory.lastOrNull()?.action
-        if (lastAction is Action.Call || lastAction is Action.Check) {
-            // Check if all active players have acted
-            val activePlayerCount = state.getActivePlayerCount()
-            if (activePlayerCount > 1 && state.street != Street.RIVER) {
-                return true  // Need to deal next street
-            }
-        }
-        return false
+        // Transition to next street if betting round is complete
+        return state.shouldTransitionToNextStreet()
     }
 
     /**
      * Builds a chance node (dealing community cards).
+     *
+     * Phase 2.6: Uses a fixed flop board (K♠7♥2♦) for verification.
+     * Full implementation would enumerate boards with suit isomorphism.
      */
     private fun buildChanceNode(state: PokerGameState, depth: Int): GameTreeNode {
         val nextStreet = getNextStreet(state.street)
 
-        // For simplification, we'll abstract away the specific chance outcomes
-        // In a full implementation, we'd enumerate possible boards and use suit isomorphism
-        // For now, create a simplified chance node that transitions to next street
+        // Reset investedThisRound for all players when advancing to new street
+        val resetPlayerStates = state.playerStates.mapValues { (_, playerState) ->
+            playerState.copy(investedThisRound = 0.0)
+        }
+
+        // Phase 2.6: Use fixed flop board K♠7♥2♦
+        // This is a "dry" rainbow board with one high card
+        // Good for testing because it's uncoordinated and straightforward
+        val fixedFlopBoard = listOf(
+            Card(com.nlhsolver.poker.Rank.KING, com.nlhsolver.poker.Suit.SPADES),
+            Card(com.nlhsolver.poker.Rank.SEVEN, com.nlhsolver.poker.Suit.HEARTS),
+            Card(com.nlhsolver.poker.Rank.TWO, com.nlhsolver.poker.Suit.DIAMONDS)
+        )
 
         val nextState = state.copy(
             street = nextStreet,
             board = when (nextStreet) {
-                Street.FLOP -> listOf(Card.ACE_SPADES, Card.KING_DIAMONDS, Card.QUEEN_HEARTS)  // Placeholder
-                Street.TURN -> state.board + Card.JACK_CLUBS
-                Street.RIVER -> state.board + Card.TEN_SPADES
+                Street.FLOP -> fixedFlopBoard
+                Street.TURN -> state.board + Card(com.nlhsolver.poker.Rank.JACK, com.nlhsolver.poker.Suit.CLUBS)
+                Street.RIVER -> state.board + Card(com.nlhsolver.poker.Rank.TEN, com.nlhsolver.poker.Suit.SPADES)
                 else -> state.board
-            }
+            },
+            playerStates = resetPlayerStates,
+            actionHistory = emptyList() // Reset action history for new street
         )
 
         val childNode = buildSubtree(nextState, depth + 1)
 
-        // Create chance node with single outcome (simplified)
+        // Create chance node with single outcome (deterministic for Phase 2.6)
         return GameTreeNode(
             nodeType = NodeType.CHANCE,
             gameState = state,
@@ -127,6 +146,11 @@ class GameTreeBuilder(
     private fun buildDecisionNode(state: PokerGameState, depth: Int): GameTreeNode {
         val actingPlayer = determineActingPlayer(state)
         val legalActions = generateLegalActions(state, actingPlayer)
+
+        // Validate we have legal actions
+        require(legalActions.isNotEmpty()) {
+            "Cannot create decision node with no legal actions (acting player: $actingPlayer, depth: $depth)"
+        }
 
         // Build child nodes for each action
         val children = mutableMapOf<Action, GameTreeNode>()
@@ -146,10 +170,26 @@ class GameTreeBuilder(
      * Determines which player should act next.
      */
     private fun determineActingPlayer(state: PokerGameState): Position {
-        // Simple rule for heads-up: alternate between positions
-        // TODO: Implement proper poker action order (button acts last postflop, etc.)
-        val activePlayers = state.getActivePlayers()
-        return if (activePlayers.isNotEmpty()) activePlayers[0] else positions[0]
+        // Find players who can still act (not folded, not all-in)
+        val playersWhoCanAct = state.playerStates.filter { it.value.canAct() }.keys.toList()
+
+        if (playersWhoCanAct.isEmpty()) {
+            // No one can act - this shouldn't happen as buildSubtree should have caught this
+            throw IllegalStateException("No players can act, but determineActingPlayer was called")
+        }
+
+        // Determine last actor
+        val lastActor = state.actionHistory.lastOrNull()?.actor
+
+        if (lastActor == null || playersWhoCanAct.size == 1) {
+            // No previous action or only one player can act
+            return playersWhoCanAct[0]
+        }
+
+        // Alternate to next player who can act
+        val currentIndex = playersWhoCanAct.indexOf(lastActor)
+        val nextIndex = (currentIndex + 1) % playersWhoCanAct.size
+        return playersWhoCanAct[nextIndex]
     }
 
     /**
@@ -170,6 +210,12 @@ class GameTreeBuilder(
             return emptyList()
         }
 
+        // Count raises this street to limit aggression
+        val raisesThisStreet = state.actionHistory
+            .filter { it.action is Action.Bet || it.action is Action.Raise }
+            .count()
+        val maxRaisesPerStreet = 2 // Limit to 2 raises per street
+
         // FOLD: Always available if there's a bet to face
         if (amountToCall > 0.0) {
             actions.add(Action.Fold)
@@ -185,25 +231,34 @@ class GameTreeBuilder(
             actions.add(Action.Call)
         }
 
-        // BET/RAISE: Generate discretized bet sizes per configuration
-        val availableStack = playerState.stackBb
-        val pot = state.pot
+        // BET/RAISE: Only if we haven't exceeded raise limit
+        if (raisesThisStreet < maxRaisesPerStreet) {
+            val availableStack = playerState.stackBb
+            val pot = state.pot
 
-        for (betSize in config.betSizingScheme.sizes) {
-            when (betSize) {
-                is BetSize.PotRelative -> {
-                    val betAmount = pot * betSize.multiplier
-                    if (betAmount <= availableStack && betAmount > amountToCall) {
+            for (betSize in config.betSizingScheme.sizes) {
+                when (betSize) {
+                    is BetSize.PotRelative -> {
+                        val betAmount = pot * betSize.multiplier
+
                         if (amountToCall == 0.0) {
-                            actions.add(Action.Bet(betAmount))
+                            // Betting (no bet to call)
+                            if (betAmount <= availableStack && betAmount > 0.0) {
+                                actions.add(Action.Bet(betAmount))
+                            }
                         } else {
-                            actions.add(Action.Raise(highestBet + betAmount))
+                            // Raising (bet to call)
+                            val totalToInvest = highestBet + betAmount
+                            val additionalNeeded = totalToInvest - playerState.investedThisRound
+                            if (additionalNeeded <= availableStack && additionalNeeded > amountToCall) {
+                                actions.add(Action.Raise(totalToInvest))
+                            }
                         }
                     }
-                }
-                is BetSize.AllIn -> {
-                    if (availableStack > amountToCall) {
-                        actions.add(Action.AllIn(availableStack))
+                    is BetSize.AllIn -> {
+                        if (availableStack > amountToCall) {
+                            actions.add(Action.AllIn(availableStack))
+                        }
                     }
                 }
             }
@@ -257,8 +312,10 @@ class GameTreeBuilder(
             }
         }
 
-        // Calculate new pot
-        val newPot = newPlayerStates.values.sumOf { it.investedThisRound }
+        // Calculate new pot (add only the new money invested this action)
+        val oldTotalInvested = state.playerStates.values.sumOf { it.investedThisRound }
+        val newTotalInvested = newPlayerStates.values.sumOf { it.investedThisRound }
+        val newPot = state.pot + (newTotalInvested - oldTotalInvested)
 
         // Add action to history
         val newHistory = state.actionHistory + HistoricalAction(
@@ -272,6 +329,26 @@ class GameTreeBuilder(
             }
         )
 
+        // Validate pot before creating new state
+        require(newPot > 0.0) {
+            buildString {
+                appendLine("Pot must be positive after action, but got $newPot")
+                appendLine("Action: $action")
+                appendLine("Player: $player")
+                appendLine("Old pot: ${state.pot}")
+                appendLine("Old total invested: $oldTotalInvested")
+                appendLine("New total invested: $newTotalInvested")
+                appendLine("Old player states:")
+                state.playerStates.forEach { (pos, ps) ->
+                    appendLine("  $pos: stack=${ps.stackBb}, invested=${ps.investedThisRound}")
+                }
+                appendLine("New player states:")
+                newPlayerStates.forEach { (pos, ps) ->
+                    appendLine("  $pos: stack=${ps.stackBb}, invested=${ps.investedThisRound}")
+                }
+            }
+        }
+
         return state.copy(
             pot = newPot,
             playerStates = newPlayerStates,
@@ -283,18 +360,31 @@ class GameTreeBuilder(
      * Creates the initial game state (preflop, no actions yet).
      */
     private fun createInitialState(): PokerGameState {
+        // In heads-up: BTN posts SB (0.5bb), BB posts BB (1.0bb)
+        val smallBlind = 0.5
+        val bigBlind = 1.0
+
         val playerStates = positions.associateWith { position ->
             val stack = config.stackSizes[position] ?: 100.0
+
+            // Determine blind amounts
+            val (blindPosted, remainingStack) = when (position) {
+                Position.BTN -> Pair(smallBlind, stack - smallBlind)
+                Position.BB -> Pair(bigBlind, stack - bigBlind)
+                else -> Pair(0.0, stack)
+            }
+
             PokerPlayerState(
                 position = position,
-                stackBb = stack
+                stackBb = remainingStack,
+                investedThisRound = blindPosted
             )
         }
 
         return PokerGameState(
             street = Street.PREFLOP,
             board = emptyList(),
-            pot = 1.5,  // Assume 0.5bb SB + 1bb BB = 1.5bb
+            pot = smallBlind + bigBlind,  // 0.5bb SB + 1bb BB = 1.5bb
             playerStates = playerStates
         )
     }

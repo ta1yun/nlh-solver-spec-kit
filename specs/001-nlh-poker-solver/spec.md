@@ -159,6 +159,28 @@ A user wants to monitor solve progress in real-time to understand how close the 
 - REST API clients can communicate over HTTP/HTTPS with the solver service
 - Both CLI and REST API interface the same solver core engine and share the same persisted data
 
+## Implementation Notes
+
+### Phased Solver Development
+
+The solver is developed incrementally to validate correctness before optimization:
+
+1. **Preflop No-Abstraction**: Upgrade from 20 sampled hands to all 169 canonical hands to validate CFR at scale
+2. **Preflop + Flop Verification**: Single fixed board with all hands to validate multi-street CFR before abstractions
+3. **Abstraction Development**: Build board isomorphism and hand bucketing layers
+4. **Full Game Tree**: Complete preflop → river solver with abstractions
+
+**Rationale**: Preflop-only solving produces a "toy game" solution because preflop strategy depends on postflop play (implied odds, positional advantage, equity realization). Accurate preflop ranges only emerge from solving the full game tree. This phased approach validates correctness at each step before adding complexity.
+
+### No-Abstraction vs PioSOLVER Approach
+
+This solver uses abstraction (hand bucketing, board isomorphism) for tractability on consumer hardware. PioSOLVER takes a different approach:
+- PioSOLVER doesn't solve preflop—users input ranges from external sources
+- PioSOLVER solves postflop with no hand abstraction (all 1,326 combos)
+- PioSOLVER requires user-provided narrow ranges to make this tractable
+
+Our solver aims to produce usable preflop ranges, which requires solving the full game tree with abstractions to manage complexity.
+
 ## Out of Scope
 
 - Real-time solving during live play (solves are computational and take hours, not seconds)

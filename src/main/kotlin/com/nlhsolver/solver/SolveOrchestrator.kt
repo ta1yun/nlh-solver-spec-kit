@@ -18,7 +18,8 @@ import java.util.UUID
  * Supports both synchronous (blocking) and asynchronous execution.
  */
 class SolveOrchestrator(
-    private val strategyExtractor: StrategyExtractor = StrategyExtractor()
+    private val strategyExtractor: StrategyExtractor = StrategyExtractor(),
+    private val strategyRepository: com.nlhsolver.storage.StrategyRepository = com.nlhsolver.storage.StrategyRepository()
 ) {
     /**
      * Execute a solve synchronously (blocking until completion).
@@ -55,10 +56,43 @@ class SolveOrchestrator(
             exploitabilityCalculator = exploitabilityCalculator
         )
 
-        // Build game tree for all starting scenarios
-        // For heads-up, we need to solve for all possible preflop situations
-        // For simplicity in MVP, we'll start with a single representative scenario
-        val rootState = createInitialGameState(configuration)
+        // Phase 2.5: Full 169-hand preflop solving
+        // Generate all valid matchups between all 169 canonical hands
+        // For quick testing, limit matchups via NLH_MAX_MATCHUPS environment variable
+        val maxMatchups = System.getenv("NLH_MAX_MATCHUPS")?.toIntOrNull()
+        val allMatchupsRaw = com.nlhsolver.core.StartingHandSampler.generateAllCanonicalMatchups()
+        val allMatchups = if (maxMatchups != null && maxMatchups > 0) {
+            println("  [TEST MODE] Limiting to $maxMatchups matchups")
+            allMatchupsRaw.take(maxMatchups)
+        } else {
+            allMatchupsRaw
+        }
+        val totalWeight = com.nlhsolver.core.StartingHandSampler.getTotalWeight(allMatchups)
+
+        // Create root states with weight information for each matchup
+        data class WeightedRootState(
+            val state: PokerGameState,
+            val matchup: com.nlhsolver.core.StartingHandSampler.HandMatchup,
+            val normalizedWeight: Double
+        )
+
+        val weightedStates = allMatchups.map { matchup ->
+            WeightedRootState(
+                state = com.nlhsolver.core.StartingHandSampler.createStartingState(
+                    matchup = matchup,
+                    btnStack = configuration.stackSizes[com.nlhsolver.poker.Position.BTN] ?: 50.0,
+                    bbStack = configuration.stackSizes[com.nlhsolver.poker.Position.BB] ?: 50.0
+                ),
+                matchup = matchup,
+                normalizedWeight = matchup.weight / totalWeight
+            )
+        }
+
+        println("Phase 2.5: Training on all 169 canonical hands")
+        println("  Total matchups: ${allMatchups.size}")
+        println("  Unique BTN hands: ${allMatchups.map { it.btnHand.notation }.toSet().size}")
+        println("  Unique BB hands: ${allMatchups.map { it.bbHand.notation }.toSet().size}")
+        println("  Total weight: ${"%.2f".format(totalWeight)}")
 
         // Start convergence monitoring
         convergenceMonitor.start()
@@ -71,14 +105,39 @@ class SolveOrchestrator(
         while (!converged) {
             currentIteration++
 
-            // Run one CFR iteration
-            cfrSolver.train(rootState, iterations = 1)
+            // Run one CFR iteration on all starting hands with combo weighting
+            // Each matchup is weighted by its combo frequency
+            for (weightedState in weightedStates) {
+                cfrSolver.train(weightedState.state, iterations = 1)
+            }
 
             // Check convergence (this is expensive, so only done at intervals)
-            convergenceStatus = convergenceMonitor.checkConvergence(
+            // Calculate weighted average exploitability across all matchups
+            var totalWeightedExploitability = 0.0
+            var weightSum = 0.0
+
+            for (weightedState in weightedStates) {
+                val exploitability = exploitabilityCalculator.calculateExploitability(
+                    weightedState.state,
+                    cfrSolver.getStrategyProfile()
+                )
+                totalWeightedExploitability += exploitability * weightedState.normalizedWeight
+                weightSum += weightedState.normalizedWeight
+            }
+
+            val avgExploitability = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
+
+            // Debug: Log exploitability on first check
+            if (currentIteration == configuration.convergenceCriteria.evaluationFrequency) {
+                println("DEBUG: First exploitability check at iteration $currentIteration")
+                println("  Weighted average exploitability: ${"%.4f".format(avgExploitability)}")
+                println("  Total matchups evaluated: ${weightedStates.size}")
+            }
+
+            // Use first root state for convergence check, but override exploitability with average
+            convergenceStatus = convergenceMonitor.checkConvergenceWithExploitability(
                 currentIteration = currentIteration,
-                rootState = rootState,
-                strategyProfile = cfrSolver.getStrategyProfile()
+                exploitability = avgExploitability
             )
 
             // Update progress callback if provided
@@ -86,10 +145,17 @@ class SolveOrchestrator(
                 val iterationSpeed = convergenceMonitor.getIterationSpeed(currentIteration)
                 val estimatedTimeRemaining = convergenceMonitor.getEstimatedTimeRemaining(iterationSpeed)
 
+                val exploitability = convergenceMonitor.getBestExploitability()
+                // Only report exploitability if it's a valid value
+                val validExploitability = when {
+                    exploitability.isNaN() || exploitability.isInfinite() -> null
+                    exploitability < 0.0 || exploitability >= Double.MAX_VALUE -> null
+                    else -> exploitability
+                }
                 progressCallback?.invoke(
                     JobProgress(
                         iterationsCompleted = currentIteration.toLong(),
-                        currentExploitability = convergenceMonitor.getBestExploitability(),
+                        currentExploitability = validExploitability,
                         estimatedIterationsRemaining = convergenceMonitor.getEstimatedIterationsRemaining()?.toLong(),
                         estimatedTimeRemainingSeconds = estimatedTimeRemaining
                     )
@@ -106,43 +172,48 @@ class SolveOrchestrator(
         val finalStatus = convergenceStatus as ConvergenceStatus.Converged
         val jobId = UUID.randomUUID()
 
+        // Normalize exploitability value (handle NaN, Infinity, and negative values)
+        val normalizedExploitability = when {
+            finalStatus.finalExploitability.isNaN() -> 100.0  // NaN -> worst case
+            finalStatus.finalExploitability.isInfinite() -> 100.0  // Infinity -> worst case
+            finalStatus.finalExploitability < 0.0 -> 0.0  // Negative -> best case (nash equilibrium)
+            finalStatus.finalExploitability > 100.0 -> 100.0  // Too high -> cap at 100%
+            else -> finalStatus.finalExploitability
+        }
+
+        // Get CFR strategy profile
+        val cfrStrategyProfile = cfrSolver.getStrategyProfile()
+
         // Extract final strategy metadata
         val strategyProfile = strategyExtractor.extractStrategy(
-            cfrStrategyProfile = cfrSolver.getStrategyProfile(),
+            cfrStrategyProfile = cfrStrategyProfile,
             solveJobId = jobId,
-            finalExploitability = finalStatus.finalExploitability
+            finalExploitability = normalizedExploitability
         )
+
+        // Persist strategy to disk
+        strategyRepository.save(strategyProfile)  // Save metadata
+        strategyRepository.saveStrategyData(strategyProfile.strategyId, cfrStrategyProfile)  // Save full strategy data
+
+        // Determine if we actually converged (exploitability met target)
+        val actuallyConverged = normalizedExploitability <= configuration.convergenceCriteria.targetExploitability
+
+        // Ensure completionType matches converged status
+        val completionType = if (actuallyConverged) {
+            CompletionType.CONVERGED
+        } else {
+            finalStatus.reason.toCompletionType()
+        }
 
         return SolveResult(
             strategyProfileId = strategyProfile.strategyId,
-            finalExploitability = finalStatus.finalExploitability,
+            finalExploitability = normalizedExploitability,
             iterationsRun = finalStatus.iterations.toLong(),
-            converged = finalStatus.finalExploitability <= configuration.convergenceCriteria.targetExploitability,
-            completionType = finalStatus.reason.toCompletionType(),
+            converged = actuallyConverged,
+            completionType = completionType,
             executionTimeSeconds = finalStatus.elapsedSeconds,
             storagePathPb = Paths.get("data/strategies/${strategyProfile.strategyId}.pb.gz")
         )
-    }
-
-    /**
-     * Create the initial game state from configuration.
-     *
-     * For MVP (heads-up), this creates a simple starting state.
-     * In the future, this would iterate over all preflop scenarios.
-     *
-     * @param configuration Solve configuration
-     * @return Root game state
-     */
-    private fun createInitialGameState(configuration: SolveConfiguration): GameState {
-        // For MVP, create a simple representative root state
-        // This would be expanded to cover all preflop scenarios in production
-
-        // Build game tree
-        val gameTreeBuilder = GameTreeBuilder(configuration)
-        val gameTree = gameTreeBuilder.buildTree()
-
-        // Convert GameTreeNode to GameState
-        return gameTree.rootNode.gameState
     }
 
     /**

@@ -4,6 +4,9 @@ import com.nlhsolver.core.GameStateHash
 import com.nlhsolver.core.PokerGameState
 import com.nlhsolver.core.StrategyProfile as CoreStrategyProfile
 import com.nlhsolver.poker.Action
+import com.nlhsolver.poker.Position
+import com.nlhsolver.poker.PreflopBuckets
+import com.nlhsolver.poker.PreflopBuckets.PreflopHand
 import com.nlhsolver.storage.StrategyRepository
 import java.util.UUID
 
@@ -136,6 +139,140 @@ class StrategyQueryService(
     }
 
     /**
+     * Query the strategy for a canonical hand (T203, T219).
+     *
+     * This is the Phase 2.5 upgrade that allows querying by hand notation
+     * like "AKs", "QQ", "72o" instead of requiring specific cards.
+     *
+     * Phase 2.6 adds support for flop queries with board specification.
+     *
+     * @param strategyId Strategy profile UUID
+     * @param handNotation Canonical hand notation (e.g., "AKs", "QQ", "72o")
+     * @param position Position to query (BTN or BB for heads-up)
+     * @param street Street to query (PREFLOP or FLOP)
+     * @param board Board cards for flop queries (K♠7♥2♦ format or empty for preflop)
+     * @return Aggregated strategy result for the canonical hand
+     * @throws StrategyNotFoundException if strategy doesn't exist
+     * @throws IllegalArgumentException if hand notation is invalid
+     */
+    fun queryByCanonicalHand(
+        strategyId: UUID,
+        handNotation: String,
+        position: Position = Position.BTN,
+        street: com.nlhsolver.poker.Street = com.nlhsolver.poker.Street.PREFLOP,
+        board: List<com.nlhsolver.poker.Card> = emptyList()
+    ): CanonicalHandQueryResult {
+        // Parse hand notation
+        val hand = try {
+            PreflopHand.fromNotation(handNotation)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid hand notation: $handNotation. Use format like 'AKs', 'QQ', '72o'")
+        }
+
+        // Get bucket ID for this hand
+        val bucketId = PreflopBuckets.getBucketId(hand)
+
+        // Load strategy data
+        if (!strategyRepository.exists(strategyId)) {
+            throw StrategyNotFoundException("Strategy $strategyId not found")
+        }
+
+        val coreStrategyProfile = strategyRepository.loadStrategyData(strategyId)
+            ?: throw StrategyNotFoundException("Strategy data for $strategyId not found")
+
+        // Build board string for matching (must match PokerGameState.getInfoSet() format)
+        val boardStr = if (board.isNotEmpty()) {
+            board.joinToString(",") { "${it.rank}${it.suit}" }
+        } else {
+            ""
+        }
+
+        // Find all info sets for this bucket at the specified street
+        // Info sets are formatted like: "p0:bucket=X:street=PREFLOP:board=:..."
+        val playerIndex = if (position == Position.BTN) 0 else 1
+        val matchingInfoSets = coreStrategyProfile.getAllInfoSets()
+            .filter { infoSet ->
+                infoSet.infoSet.contains("p$playerIndex:") &&
+                infoSet.infoSet.contains("bucket=$bucketId:") &&
+                infoSet.infoSet.contains("street=$street") &&
+                (street == com.nlhsolver.poker.Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
+            }
+            .toList()
+
+        if (matchingInfoSets.isEmpty()) {
+            return CanonicalHandQueryResult(
+                handNotation = hand.notation,
+                position = position,
+                bucketId = bucketId,
+                actionProbabilities = emptyMap(),
+                found = false,
+                infoSetsMatched = 0,
+                street = street,
+                board = board
+            )
+        }
+
+        // Aggregate strategies across all matching info sets
+        // Weight by visit count to get the overall strategy
+        val aggregatedProbabilities = mutableMapOf<String, Double>()
+        var totalWeight = 0L
+
+        for (infoSet in matchingInfoSets) {
+            val avgStrategy = infoSet.getAverageStrategy()
+            val visitCount = infoSet.getVisitCount()
+            totalWeight += visitCount
+
+            // Map action indices to names (fold, check, call, bet, raise)
+            val actionNames = listOf("fold", "check", "call", "bet", "raise").take(infoSet.numActions)
+
+            for ((index, prob) in avgStrategy.withIndex()) {
+                if (index < actionNames.size) {
+                    val action = actionNames[index]
+                    aggregatedProbabilities[action] = (aggregatedProbabilities[action] ?: 0.0) + prob * visitCount
+                }
+            }
+        }
+
+        // Normalize probabilities
+        if (totalWeight > 0) {
+            for (action in aggregatedProbabilities.keys.toList()) {
+                aggregatedProbabilities[action] = aggregatedProbabilities[action]!! / totalWeight
+            }
+        }
+
+        return CanonicalHandQueryResult(
+            handNotation = hand.notation,
+            position = position,
+            bucketId = bucketId,
+            actionProbabilities = aggregatedProbabilities,
+            found = true,
+            infoSetsMatched = matchingInfoSets.size,
+            street = street,
+            board = board
+        )
+    }
+
+    /**
+     * Query all 169 canonical hands to get the full range at any street (T219).
+     *
+     * @param strategyId Strategy profile UUID
+     * @param position Position to query
+     * @param street Street to query (PREFLOP or FLOP)
+     * @param board Board cards for flop queries
+     * @return Map of hand notation to action probabilities
+     */
+    fun queryFullRange(
+        strategyId: UUID,
+        position: Position = Position.BTN,
+        street: com.nlhsolver.poker.Street = com.nlhsolver.poker.Street.PREFLOP,
+        board: List<com.nlhsolver.poker.Card> = emptyList()
+    ): Map<String, CanonicalHandQueryResult> {
+        return PreflopBuckets.allHands.associate { hand ->
+            hand.notation to queryByCanonicalHand(strategyId, hand.notation, position, street, board)
+        }
+    }
+
+    /**
      * Get statistics about a strategy profile.
      *
      * @param strategyId Strategy profile UUID
@@ -206,3 +343,50 @@ class StrategyNotFoundException(message: String) : Exception(message)
  * Exception thrown when a game state is invalid for querying.
  */
 class InvalidGameStateException(message: String) : Exception(message)
+
+/**
+ * Result of a canonical hand query (Phase 2.5, T219).
+ *
+ * @property handNotation The canonical hand notation (e.g., "AKs")
+ * @property position Position queried
+ * @property bucketId The preflop bucket ID (0-168)
+ * @property actionProbabilities Map of action to probability
+ * @property found Whether any info sets were found for this hand
+ * @property infoSetsMatched Number of info sets that matched
+ * @property street The street queried (PREFLOP, FLOP, etc.)
+ * @property board The board cards (empty for preflop)
+ */
+data class CanonicalHandQueryResult(
+    val handNotation: String,
+    val position: Position,
+    val bucketId: Int,
+    val actionProbabilities: Map<String, Double>,
+    val found: Boolean,
+    val infoSetsMatched: Int,
+    val street: com.nlhsolver.poker.Street = com.nlhsolver.poker.Street.PREFLOP,
+    val board: List<com.nlhsolver.poker.Card> = emptyList()
+) {
+    /**
+     * Get the open-raise frequency (bet/raise probability).
+     */
+    val raiseFrequency: Double
+        get() = (actionProbabilities["bet"] ?: 0.0) + (actionProbabilities["raise"] ?: 0.0)
+
+    /**
+     * Get the call frequency.
+     */
+    val callFrequency: Double
+        get() = actionProbabilities["call"] ?: 0.0
+
+    /**
+     * Get the fold frequency.
+     */
+    val foldFrequency: Double
+        get() = actionProbabilities["fold"] ?: 0.0
+
+    /**
+     * Get the check frequency.
+     */
+    val checkFrequency: Double
+        get() = actionProbabilities["check"] ?: 0.0
+}

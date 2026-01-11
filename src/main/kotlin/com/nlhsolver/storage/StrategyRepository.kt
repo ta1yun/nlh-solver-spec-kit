@@ -238,16 +238,18 @@ class StrategyRepository(
         val coreProfile = CoreStrategyProfile()
 
         // Rebuild the strategy profile from saved data
-        // Note: This is a simplified reconstruction
-        // In production, we'd need to reconstruct the full regret tables
-
         for (infoSetPb in pb.infoSetStrategiesList) {
             val numActions = infoSetPb.actionProbabilitiesMap.size
             val infoSet = coreProfile.getInfoSetStrategy(infoSetPb.infoSet, numActions)
 
-            // The saved data only has average strategies, not regrets
-            // For querying, this is sufficient
-            // For continued training, we'd need to save regrets too
+            // Reconstruct average strategy from saved action probabilities
+            // The map keys are "action_0", "action_1", etc.
+            val averageStrategy = DoubleArray(numActions) { i ->
+                infoSetPb.actionProbabilitiesMap["action_$i"] ?: (1.0 / numActions)
+            }
+
+            // Restore the cumulative strategy and visit count
+            infoSet.restoreFromAverageStrategy(averageStrategy, infoSetPb.visitCount)
         }
 
         return coreProfile

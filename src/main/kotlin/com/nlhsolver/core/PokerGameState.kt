@@ -4,6 +4,7 @@ import com.nlhsolver.poker.Card
 import com.nlhsolver.poker.Position
 import com.nlhsolver.poker.Street
 import com.nlhsolver.poker.Action
+import com.nlhsolver.poker.HandEvaluator
 
 /**
  * Represents the poker-specific game state at a node (T033).
@@ -66,10 +67,74 @@ data class PokerGameState(
 
     /**
      * Returns true if the hand is over (all but one player folded or reached showdown).
+     *
+     * Phase 2.6 Update: Supports multi-street play (preflop + flop).
+     * Hand ends when:
+     * 1. Only one player remains (others folded)
+     * 2. All players are all-in (run out board)
+     * 3. Betting is complete on the final street (RIVER for full game, FLOP for Phase 2.6)
      */
     fun isHandOver(): Boolean {
         val activePlayers = getActivePlayerCount()
-        return activePlayers <= 1 || (street == Street.RIVER && actionHistory.lastOrNull()?.action is Action.Call)
+
+        // Hand is over if only 1 or fewer players remain (others folded)
+        if (activePlayers <= 1) {
+            return true
+        }
+
+        // Hand is over if all remaining players are all-in
+        val playersWhoCanAct = playerStates.values.count { it.canAct() }
+        if (playersWhoCanAct == 0) {
+            return true
+        }
+
+        return false  // Betting round may continue or transition to next street
+    }
+
+    /**
+     * Returns true if the current betting round is complete.
+     *
+     * A betting round is complete when:
+     * 1. All active players have matched the highest bet
+     * 2. At least one action has been taken this street
+     * 3. All players have had a chance to act
+     */
+    fun isBettingRoundComplete(): Boolean {
+        val activePlayers = playerStates.values.filter { !it.isFolded }
+
+        // No actions this street means round isn't complete (need to give everyone a chance)
+        if (actionHistory.isEmpty()) {
+            return false
+        }
+
+        // Check if all active players have matched the highest bet
+        val highestBet = playerStates.values.maxOfOrNull { it.investedThisRound } ?: 0.0
+        val allPlayersMatched = activePlayers
+            .filter { it.canAct() || it.isAllIn }
+            .all { it.investedThisRound == highestBet }
+
+        if (!allPlayersMatched) {
+            return false
+        }
+
+        // Check if all players who can act have acted at least once
+        val playersWhoCanAct = activePlayers.filter { it.canAct() }.map { it.position }.toSet()
+        val playersWhoActed = actionHistory.map { it.actor }.toSet()
+
+        return playersWhoCanAct.all { it in playersWhoActed }
+    }
+
+    /**
+     * Check if we should transition to the next street.
+     * Returns true if betting is complete and we're not on the final street.
+     */
+    fun shouldTransitionToNextStreet(): Boolean {
+        if (!isBettingRoundComplete()) return false
+
+        // For Phase 2.6: Stop at flop (preflop + flop only)
+        // For full game: Only river is the final street
+        return street == Street.PREFLOP  // Phase 2.6: transition after preflop
+        // Full game would be: return street != Street.RIVER
     }
 
     /**
@@ -100,68 +165,357 @@ data class PokerGameState(
     override fun currentPlayer(): Int? {
         if (isTerminal()) return null
 
-        // Find the next player to act
-        // For poker, this is the first active player who hasn't acted this round
-        // or whose bet doesn't match the current bet
-        val activePlayers = getActivePlayers()
-        if (activePlayers.isEmpty()) return null
+        // If betting round is complete and we should transition, return null
+        // The game tree builder will handle the street transition
+        if (shouldTransitionToNextStreet()) return null
 
-        // Simplified: return first active player position as player index
-        // In production, we'd track whose turn it is more carefully
-        return activePlayers.first().ordinal
+        // Get list of positions in the game (sorted by ordinal)
+        val allPositions = playerStates.keys.sortedBy { it.ordinal }
+
+        // Find players who can still act (not folded, not all-in)
+        val playersWhoCanAct = playerStates.filter { it.value.canAct() }.keys.sortedBy { it.ordinal }
+
+        if (playersWhoCanAct.isEmpty()) return null
+        if (playersWhoCanAct.size == 1) {
+            // Return player index (0-based position in allPositions list)
+            return allPositions.indexOf(playersWhoCanAct[0])
+        }
+
+        // Determine last actor
+        val lastActor = actionHistory.lastOrNull()?.actor
+
+        if (lastActor == null) {
+            // First action of the street
+            // Preflop: BTN acts first (highest position in heads-up)
+            // Postflop: BB acts first (lowest position, out of position)
+            val firstToAct = if (street == Street.PREFLOP) {
+                playersWhoCanAct.maxByOrNull { it.ordinal }  // BTN acts first preflop
+            } else {
+                playersWhoCanAct.minByOrNull { it.ordinal }  // BB (OOP) acts first postflop
+            }
+            return allPositions.indexOf(firstToAct!!)
+        }
+
+        // Check if betting round is complete (but we're not transitioning)
+        if (isBettingRoundComplete()) {
+            return null
+        }
+
+        // Alternate to next player who can act
+        val currentIndex = playersWhoCanAct.indexOf(lastActor)
+        val nextIndex = (currentIndex + 1) % playersWhoCanAct.size
+        val nextPlayer = playersWhoCanAct[nextIndex]
+
+        // Return player index (0-based position in allPositions list)
+        return allPositions.indexOf(nextPlayer)
     }
 
     override fun isTerminal(): Boolean {
-        return isHandOver()
+        // Hand is over if someone folded or all-in
+        if (isHandOver()) return true
+
+        // Hand is over if betting is complete on the final street
+        // For Phase 2.6: FLOP is the final street
+        // For full game: RIVER would be the final street
+        if (isBettingRoundComplete() && street == Street.FLOP) {
+            return true
+        }
+
+        return false
     }
 
     override fun getUtility(): DoubleArray {
         require(isTerminal()) { "Can only get utility for terminal states" }
 
         // Calculate utilities for each player
-        // For MVP, simplified to 2-player heads-up
+        // Utility = (money won from pot) - (total money invested)
+        val allPositions = playerStates.keys.sortedBy { it.ordinal }
         val activePlayers = getActivePlayers()
 
-        // All folded except one
+        // Calculate each player's total investment
+        // Total invested = starting stack - current stack
+        val initialStackBb = 50.0  // TODO: Get from configuration
+        val totalInvested = allPositions.associateWith { pos ->
+            val playerState = playerStates[pos]!!
+            val currentTotal = playerState.stackBb + playerState.investedThisRound
+            initialStackBb - currentTotal
+        }
+
+        // All folded except one - winner takes pot
         if (activePlayers.size == 1) {
             val winner = activePlayers.first()
-            return DoubleArray(playerStates.size) { index ->
-                if (Position.values()[index] == winner) pot else 0.0
+            return DoubleArray(allPositions.size) { index ->
+                val pos = allPositions[index]
+                val moneyWon = if (pos == winner) pot else 0.0
+                val moneyInvested = totalInvested[pos]!!
+                moneyWon - moneyInvested
             }
         }
 
-        // Showdown - not fully implemented yet for MVP
-        // Would need hand evaluation logic
-        return DoubleArray(playerStates.size) { 0.0 }
+        // Showdown: Evaluate hands and award pot to winner
+        val handStrengths = allPositions.associateWith { pos ->
+            val playerState = playerStates[pos]!!
+
+            if (playerState.holeCards == null) {
+                return@associateWith Double.NEGATIVE_INFINITY
+            }
+
+            // Phase 2.6: Use actual hand evaluation when board is present
+            if (board.isNotEmpty()) {
+                // Use hand evaluator for proper poker hand ranking
+                val allCards = listOf(
+                    playerState.holeCards.first,
+                    playerState.holeCards.second
+                ) + board
+
+                // Get hand rank (higher = stronger hand)
+                try {
+                    val handRank = if (allCards.size == 5) {
+                        // Flop: exactly 5 cards (2 hole + 3 board)
+                        HandEvaluator.evaluate(allCards)
+                    } else if (allCards.size == 7) {
+                        // River: 7 cards (2 hole + 5 board)
+                        HandEvaluator.evaluateBest7(allCards)
+                    } else {
+                        // Turn: 6 cards - fall back to bucket ID for now
+                        val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
+                        return@associateWith (168.0 - bucketId.toDouble())
+                    }
+                    // Compute numeric value: type strength * 10000 + primary ranks + kickers
+                    // This ensures proper ordering while maintaining comparability
+                    var score = handRank.type.strength * 1_000_000.0
+                    handRank.primaryRanks.forEachIndexed { i, rank ->
+                        score += rank.value * Math.pow(100.0, (4 - i).toDouble())
+                    }
+                    handRank.kickers.forEachIndexed { i, rank ->
+                        score += rank.value * Math.pow(10.0, (3 - i).toDouble())
+                    }
+                    score
+                } catch (e: Exception) {
+                    // Fall back to bucket ID if evaluation fails
+                    val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
+                    (168.0 - bucketId.toDouble())
+                }
+            } else {
+                // Preflop-only: use bucket IDs as proxy for hand strength
+                // Bucket 0 = AA (strongest), Bucket 168 = 72o (weakest)
+                val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
+                (168.0 - bucketId.toDouble())
+            }
+        }
+
+        // Find winner (highest hand strength)
+        val maxStrength = handStrengths.values.maxOrNull() ?: Double.NEGATIVE_INFINITY
+        val winners = handStrengths.filter { it.value == maxStrength }.keys.toList()
+
+        // Split pot among winners (handle ties)
+        val winningsPerWinner = pot / winners.size
+
+        return DoubleArray(allPositions.size) { index ->
+            val pos = allPositions[index]
+            val moneyWon = if (pos in winners) winningsPerWinner else 0.0
+            val moneyInvested = totalInvested[pos]!!
+            moneyWon - moneyInvested
+        }
     }
 
     override fun getLegalActions(): List<GameAction> {
         if (isTerminal()) return emptyList()
 
-        // Return available poker actions as GameActions
-        // For MVP, simplified action set
-        return listOf(
-            SimpleGameAction("fold", "Fold"),
-            SimpleGameAction("check", "Check"),
-            SimpleGameAction("call", "Call"),
-            SimpleGameAction("bet", "Bet"),
-            SimpleGameAction("raise", "Raise")
-        )
+        val player = currentPlayer() ?: return emptyList()
+
+        // Convert player index to position
+        val allPositions = playerStates.keys.sortedBy { it.ordinal }
+        val position = allPositions[player]
+        val playerState = getPlayerState(position) ?: return emptyList()
+
+        if (!playerState.canAct()) return emptyList()
+
+        val actions = mutableListOf<GameAction>()
+
+        // Determine current highest bet
+        val highestBet = playerStates.values.maxOfOrNull { it.investedThisRound } ?: 0.0
+        val amountToCall = highestBet - playerState.investedThisRound
+
+        // Count raises this street to limit aggression
+        val raisesThisStreet = actionHistory
+            .filter { it.action is Action.Bet || it.action is Action.Raise }
+            .count()
+        val maxRaisesPerStreet = 2
+
+        // FOLD: Available if there's a bet to face
+        if (amountToCall > 0.0) {
+            actions.add(SimpleGameAction("fold", "Fold"))
+        }
+
+        // CHECK: Available if no bet to face
+        if (amountToCall == 0.0) {
+            actions.add(SimpleGameAction("check", "Check"))
+        }
+
+        // CALL: Available if there's a bet to face and player can afford it
+        if (amountToCall > 0.0 && playerState.stackBb >= amountToCall) {
+            actions.add(SimpleGameAction("call", "Call"))
+        }
+
+        // BET/RAISE: Only if we haven't exceeded raise limit
+        if (raisesThisStreet < maxRaisesPerStreet) {
+            // For now, just offer pot-sized bet/raise
+            if (amountToCall == 0.0 && playerState.stackBb > 0.0) {
+                actions.add(SimpleGameAction("bet", "Bet"))
+            } else if (amountToCall > 0.0 && playerState.stackBb > amountToCall) {
+                actions.add(SimpleGameAction("raise", "Raise"))
+            }
+        }
+
+        return actions
     }
 
     override fun applyAction(action: GameAction): GameState {
-        // For MVP, return same state (not fully implemented)
-        // Full implementation would apply the action and return new state
-        return this
+        // Get current player index
+        val playerIndex = currentPlayer()
+            ?: throw IllegalStateException("Cannot apply action to terminal state")
+
+        // Convert player index to position
+        val allPositions = playerStates.keys.sortedBy { it.ordinal }
+        val position = allPositions[playerIndex]
+        val playerState = getPlayerState(position)
+            ?: throw IllegalStateException("No state for current player $position")
+
+        // Convert GameAction to poker Action
+        // For MVP, use simplified actions with default amounts
+        val pokerAction = when (action.getActionId().lowercase()) {
+            "fold" -> Action.Fold
+            "check" -> Action.Check
+            "call" -> Action.Call
+            "bet" -> Action.Bet(pot * 0.5) // Default to 0.5x pot bet
+            "raise" -> {
+                val highestBet = playerStates.values.maxOf { it.investedThisRound }
+                Action.Raise(highestBet + pot * 0.5) // Default to 0.5x pot raise
+            }
+            else -> throw IllegalArgumentException("Unknown action: ${action.getActionId()}")
+        }
+
+        // Apply action logic (similar to GameTreeBuilder.applyAction)
+        val newPlayerStates = playerStates.toMutableMap()
+
+        when (pokerAction) {
+            is Action.Fold -> {
+                newPlayerStates[position] = playerState.copy(isFolded = true)
+            }
+            is Action.Check -> {
+                // No state change for check
+            }
+            is Action.Call -> {
+                val highestBet = playerStates.values.maxOf { it.investedThisRound }
+                val amountToCall = highestBet - playerState.investedThisRound
+                newPlayerStates[position] = playerState.copy(
+                    stackBb = playerState.stackBb - amountToCall,
+                    investedThisRound = highestBet
+                )
+            }
+            is Action.Bet -> {
+                newPlayerStates[position] = playerState.copy(
+                    stackBb = playerState.stackBb - pokerAction.amountBb,
+                    investedThisRound = playerState.investedThisRound + pokerAction.amountBb
+                )
+            }
+            is Action.Raise -> {
+                val amountToRaise = pokerAction.totalAmountBb - playerState.investedThisRound
+                newPlayerStates[position] = playerState.copy(
+                    stackBb = playerState.stackBb - amountToRaise,
+                    investedThisRound = pokerAction.totalAmountBb
+                )
+            }
+            is Action.AllIn -> {
+                val allInAmount = pokerAction.amountBb
+                newPlayerStates[position] = playerState.copy(
+                    stackBb = 0.0,
+                    investedThisRound = playerState.investedThisRound + allInAmount,
+                    isAllIn = true
+                )
+            }
+        }
+
+        // Calculate new pot
+        val oldTotalInvested = playerStates.values.sumOf { it.investedThisRound }
+        val newTotalInvested = newPlayerStates.values.sumOf { it.investedThisRound }
+        val newPot = pot + (newTotalInvested - oldTotalInvested)
+
+        // Add action to history
+        val newHistory = actionHistory + HistoricalAction(
+            actor = position,
+            action = pokerAction,
+            amountBb = when (pokerAction) {
+                is Action.Bet -> pokerAction.amountBb
+                is Action.Raise -> pokerAction.totalAmountBb
+                is Action.AllIn -> pokerAction.amountBb
+                else -> null
+            }
+        )
+
+        val resultState = copy(
+            pot = newPot,
+            playerStates = newPlayerStates,
+            actionHistory = newHistory
+        )
+
+        // Phase 2.6: Check if we should transition to the next street
+        if (resultState.shouldTransitionToNextStreet()) {
+            return resultState.transitionToNextStreet()
+        }
+
+        return resultState
+    }
+
+    /**
+     * Transition to the next street (Phase 2.6).
+     *
+     * Deals the board cards and resets the betting round state.
+     */
+    private fun transitionToNextStreet(): PokerGameState {
+        val nextStreet = when (street) {
+            Street.PREFLOP -> Street.FLOP
+            Street.FLOP -> Street.TURN
+            Street.TURN -> Street.RIVER
+            Street.RIVER -> Street.RIVER  // Already at river
+        }
+
+        // Reset investedThisRound for all players
+        val resetPlayerStates = playerStates.mapValues { (_, playerState) ->
+            playerState.copy(investedThisRound = 0.0)
+        }
+
+        // Phase 2.6: Use fixed flop board K♠7♥2♦
+        val fixedFlopBoard = listOf(
+            Card(com.nlhsolver.poker.Rank.KING, com.nlhsolver.poker.Suit.SPADES),
+            Card(com.nlhsolver.poker.Rank.SEVEN, com.nlhsolver.poker.Suit.HEARTS),
+            Card(com.nlhsolver.poker.Rank.TWO, com.nlhsolver.poker.Suit.DIAMONDS)
+        )
+
+        val newBoard = when (nextStreet) {
+            Street.FLOP -> fixedFlopBoard
+            Street.TURN -> board + Card(com.nlhsolver.poker.Rank.JACK, com.nlhsolver.poker.Suit.CLUBS)
+            Street.RIVER -> board + Card(com.nlhsolver.poker.Rank.TEN, com.nlhsolver.poker.Suit.SPADES)
+            else -> board
+        }
+
+        return copy(
+            street = nextStreet,
+            board = newBoard,
+            playerStates = resetPlayerStates,
+            actionHistory = emptyList()  // Reset action history for new street
+        )
     }
 
     override fun getInfoSet(): String {
         // Information set represents what the current player knows
         // Includes their hole cards (via hand bucket), board cards, and action history
-        // For MVP, use state hash as info set
-        // In production, this would be more sophisticated
         val player = currentPlayer() ?: return "terminal"
-        val position = Position.values()[player]
+
+        // Convert player index to position
+        val allPositions = playerStates.keys.sortedBy { it.ordinal }
+        val position = allPositions[player]
         val playerState = playerStates[position]
 
         return buildString {
@@ -181,6 +535,7 @@ data class PokerGameState(
  * @property position Player's position at the table
  * @property stackBb Remaining stack in big blinds
  * @property investedThisRound Amount invested in current betting round
+ * @property holeCards Player's hole cards (null if not yet dealt or unknown)
  * @property handRange Hand bucket for abstraction (null if exact hand known)
  * @property isFolded Whether player has folded
  * @property isAllIn Whether player is all-in
@@ -189,7 +544,8 @@ data class PokerPlayerState(
     val position: Position,
     val stackBb: Double,
     val investedThisRound: Double = 0.0,
-    val handRange: Int? = null,  // Hand bucket ID for abstraction
+    val holeCards: Pair<Card, Card>? = null,  // Player's two hole cards
+    val handRange: Int? = null,  // Hand bucket ID for abstraction (computed from holeCards)
     val isFolded: Boolean = false,
     val isAllIn: Boolean = false
 ) {
