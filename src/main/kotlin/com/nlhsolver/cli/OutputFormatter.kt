@@ -724,7 +724,7 @@ object OutputFormatter {
             appendLine("  Action Frequencies:")
 
             val actions = listOf("raise" to result.raiseFrequency, "call" to result.callFrequency, "fold" to result.foldFrequency, "check" to result.checkFrequency)
-                .filter { it.second > 0 }
+                .filter { it.second >= 0.005 }  // Hide actions below 0.5%
                 .sortedByDescending { it.second }
 
             for ((action, freq) in actions) {

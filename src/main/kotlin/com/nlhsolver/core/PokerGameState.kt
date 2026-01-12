@@ -131,10 +131,18 @@ data class PokerGameState(
     fun shouldTransitionToNextStreet(): Boolean {
         if (!isBettingRoundComplete()) return false
 
-        // For Phase 2.6: Stop at flop (preflop + flop only)
-        // For full game: Only river is the final street
-        return street == Street.PREFLOP  // Phase 2.6: transition after preflop
-        // Full game would be: return street != Street.RIVER
+        // Check environment variable for postflop mode
+        // NLH_FULL_POSTFLOP=true: Play all streets (PREFLOP → FLOP → TURN → RIVER)
+        // NLH_FULL_POSTFLOP=false or unset: Phase 2.6 mode (PREFLOP → FLOP, stop)
+        val enableFullPostflop = System.getenv("NLH_FULL_POSTFLOP")?.toBoolean() ?: false
+
+        return if (enableFullPostflop) {
+            // Full postflop: Allow transitions until river (final street)
+            street != Street.RIVER
+        } else {
+            // Phase 2.6: Only transition after preflop (stop at flop)
+            street == Street.PREFLOP
+        }
     }
 
     /**
@@ -214,10 +222,9 @@ data class PokerGameState(
         // Hand is over if someone folded or all-in
         if (isHandOver()) return true
 
-        // Hand is over if betting is complete on the final street
-        // For Phase 2.6: FLOP is the final street
-        // For full game: RIVER would be the final street
-        if (isBettingRoundComplete() && street == Street.FLOP) {
+        // Hand is over if betting is complete on the final street (RIVER)
+        // Full postflop support: RIVER is the terminal street
+        if (isBettingRoundComplete() && street == Street.RIVER) {
             return true
         }
 

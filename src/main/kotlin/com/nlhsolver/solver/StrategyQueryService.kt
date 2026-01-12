@@ -222,8 +222,9 @@ class StrategyQueryService(
             val visitCount = infoSet.getVisitCount()
             totalWeight += visitCount
 
-            // Map action indices to names (fold, check, call, bet, raise)
-            val actionNames = listOf("fold", "check", "call", "bet", "raise").take(infoSet.numActions)
+            // Determine action names based on the info set's game state
+            // Parse history to see if there's an unresponded bet
+            val actionNames = getActionNamesForInfoSet(infoSet.infoSet, infoSet.numActions)
 
             for ((index, prob) in avgStrategy.withIndex()) {
                 if (index < actionNames.size) {
@@ -299,6 +300,51 @@ class StrategyQueryService(
             },
             exploitability = strategyProfile.exploitability
         )
+    }
+
+    /**
+     * Determine action names based on the info set string.
+     *
+     * Parses the history in the info set to determine if there's an unresponded bet:
+     * - If facing a bet: actions are [fold, call, raise?]
+     * - If not facing a bet: actions are [check, bet, raise?]
+     *
+     * Info set format: "p0:bucket=X:street=Y:board=...:pot=Z:history=..."
+     * History format: "BTN:CHECK|BB:BET:1.0|BTN:CALL" etc.
+     */
+    private fun getActionNamesForInfoSet(infoSetStr: String, numActions: Int): List<String> {
+        // Parse the history from the info set
+        val historyPart = infoSetStr.substringAfter("history=", "")
+
+        // Check if there's an unresponded bet/raise in the history
+        val facingBet = if (historyPart.isNotEmpty()) {
+            val actions = historyPart.split("|")
+            val lastAction = actions.lastOrNull() ?: ""
+            // If last action contains BET or RAISE, we're facing a bet
+            lastAction.contains("BET") || lastAction.contains("RAISE")
+        } else {
+            false
+        }
+
+        // Determine action names based on game state
+        return if (facingBet) {
+            // Facing a bet: fold, call, [raise]
+            when (numActions) {
+                2 -> listOf("fold", "call")
+                3 -> listOf("fold", "call", "raise")
+                4 -> listOf("fold", "call", "raise", "allin")
+                else -> (0 until numActions).map { "action$it" }
+            }
+        } else {
+            // Not facing a bet: check, bet, [raise]
+            when (numActions) {
+                1 -> listOf("check")
+                2 -> listOf("check", "bet")
+                3 -> listOf("check", "bet", "raise")
+                4 -> listOf("check", "bet", "raise", "allin")
+                else -> (0 until numActions).map { "action$it" }
+            }
+        }
     }
 }
 

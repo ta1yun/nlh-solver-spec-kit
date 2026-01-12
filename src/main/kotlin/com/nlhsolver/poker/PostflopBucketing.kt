@@ -87,7 +87,11 @@ class PostflopBucketing(
     private fun calculateHandStrength(hand: Pair<Card, Card>, board: List<Card>): Double {
         // Evaluate the current hand using 5-7 card evaluator
         val myCards = listOf(hand.first, hand.second) + board
-        val myHandRank = HandEvaluator.evaluate(myCards)
+        val myHandRank = if (myCards.size == 5) {
+            HandEvaluator.evaluate(myCards)
+        } else {
+            HandEvaluator.evaluateBest7(myCards)
+        }
 
         // For simplified version, use hand rank type as proxy for strength
         // Stronger hands (higher strength value) get higher strength scores

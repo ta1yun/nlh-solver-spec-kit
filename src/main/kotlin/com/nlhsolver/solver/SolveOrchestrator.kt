@@ -56,43 +56,54 @@ class SolveOrchestrator(
             exploitabilityCalculator = exploitabilityCalculator
         )
 
-        // Phase 2.5: Full 169-hand preflop solving
-        // Generate all valid matchups between all 169 canonical hands
+        // Unified Range-Based Solving: Generate weighted matchups from ranges
+        // Works for all streets (PREFLOP, FLOP, TURN, RIVER)
         // For quick testing, limit matchups via NLH_MAX_MATCHUPS environment variable
         val maxMatchups = System.getenv("NLH_MAX_MATCHUPS")?.toIntOrNull()
-        val allMatchupsRaw = com.nlhsolver.core.StartingHandSampler.generateAllCanonicalMatchups()
+        val allMatchupsRaw = com.nlhsolver.core.StartingHandSampler.generateMatchupsFromRanges(
+            street = configuration.startingStreet,
+            board = configuration.board,
+            btnRange = configuration.btnRange,
+            bbRange = configuration.bbRange
+        )
         val allMatchups = if (maxMatchups != null && maxMatchups > 0) {
             println("  [TEST MODE] Limiting to $maxMatchups matchups")
             allMatchupsRaw.take(maxMatchups)
         } else {
             allMatchupsRaw
         }
-        val totalWeight = com.nlhsolver.core.StartingHandSampler.getTotalWeight(allMatchups)
+        val totalWeight = allMatchups.sumOf { it.weight }
 
         // Create root states with weight information for each matchup
         data class WeightedRootState(
             val state: PokerGameState,
-            val matchup: com.nlhsolver.core.StartingHandSampler.HandMatchup,
+            val matchup: com.nlhsolver.core.StartingHandSampler.WeightedMatchup,
             val normalizedWeight: Double
         )
 
         val weightedStates = allMatchups.map { matchup ->
             WeightedRootState(
-                state = com.nlhsolver.core.StartingHandSampler.createStartingState(
-                    matchup = matchup,
+                state = com.nlhsolver.core.StartingHandSampler.createGameState(
+                    street = configuration.startingStreet,
+                    board = configuration.board,
+                    btnHand = matchup.btnCards,
+                    bbHand = matchup.bbCards,
                     btnStack = configuration.stackSizes[com.nlhsolver.poker.Position.BTN] ?: 50.0,
-                    bbStack = configuration.stackSizes[com.nlhsolver.poker.Position.BB] ?: 50.0
+                    bbStack = configuration.stackSizes[com.nlhsolver.poker.Position.BB] ?: 50.0,
+                    pot = configuration.pot,
+                    btnInvested = configuration.btnInvested,
+                    bbInvested = configuration.bbInvested
                 ),
                 matchup = matchup,
                 normalizedWeight = matchup.weight / totalWeight
             )
         }
 
-        println("Phase 2.5: Training on all 169 canonical hands")
+        println("Unified range-based solving: ${configuration.startingStreet.name}")
+        println("  Board: ${if (configuration.board.isEmpty()) "(empty)" else configuration.board.joinToString("")}")
         println("  Total matchups: ${allMatchups.size}")
-        println("  Unique BTN hands: ${allMatchups.map { it.btnHand.notation }.toSet().size}")
-        println("  Unique BB hands: ${allMatchups.map { it.bbHand.notation }.toSet().size}")
         println("  Total weight: ${"%.2f".format(totalWeight)}")
+        println("  Pot: ${configuration.pot}")
 
         // Start convergence monitoring
         convergenceMonitor.start()
