@@ -5,6 +5,7 @@ import com.nlhsolver.solver.RiverScenarios
 import com.nlhsolver.solver.SolveOrchestrator
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeAll
 
 /**
  * Integration test for toy polarized vs condensed river scenario.
@@ -23,6 +24,15 @@ import org.junit.jupiter.api.Assertions.*
  * - Total matchups: 4 × 3 = 12
  */
 class ToyRiverScenarioTest {
+
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun setup() {
+            // Enable full postflop mode for river scenarios
+            System.setProperty("NLH_FULL_POSTFLOP", "true")
+        }
+    }
 
     @Test
     fun `toy scenario converges with low exploitability`() {

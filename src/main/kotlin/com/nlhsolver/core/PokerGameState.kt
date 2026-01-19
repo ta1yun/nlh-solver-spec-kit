@@ -131,10 +131,10 @@ data class PokerGameState(
     fun shouldTransitionToNextStreet(): Boolean {
         if (!isBettingRoundComplete()) return false
 
-        // Check environment variable for postflop mode
+        // Check environment variable or system property for postflop mode
         // NLH_FULL_POSTFLOP=true: Play all streets (PREFLOP → FLOP → TURN → RIVER)
         // NLH_FULL_POSTFLOP=false or unset: Phase 2.6 mode (PREFLOP → FLOP, stop)
-        val enableFullPostflop = System.getenv("NLH_FULL_POSTFLOP")?.toBoolean() ?: false
+        val enableFullPostflop = isFullPostflopEnabled()
 
         return if (enableFullPostflop) {
             // Full postflop: Allow transitions until river (final street)
@@ -143,6 +143,19 @@ data class PokerGameState(
             // Phase 2.6: Only transition after preflop (stop at flop)
             street == Street.PREFLOP
         }
+    }
+
+    /**
+     * Check if full postflop mode is enabled.
+     * Checks both system property (for tests) and environment variable (for CLI).
+     */
+    private fun isFullPostflopEnabled(): Boolean {
+        // Check system property first (allows runtime configuration in tests)
+        val systemProperty = System.getProperty("NLH_FULL_POSTFLOP")?.toBoolean()
+        if (systemProperty != null) return systemProperty
+
+        // Fall back to environment variable (for CLI usage)
+        return System.getenv("NLH_FULL_POSTFLOP")?.toBoolean() ?: false
     }
 
     /**
@@ -222,9 +235,18 @@ data class PokerGameState(
         // Hand is over if someone folded or all-in
         if (isHandOver()) return true
 
-        // Hand is over if betting is complete on the final street (RIVER)
-        // Full postflop support: RIVER is the terminal street
-        if (isBettingRoundComplete() && street == Street.RIVER) {
+        // Check if full postflop mode is enabled
+        val enableFullPostflop = isFullPostflopEnabled()
+
+        // Determine final street based on mode
+        val finalStreet = if (enableFullPostflop) {
+            Street.RIVER  // Full postflop: RIVER is terminal
+        } else {
+            Street.FLOP   // Phase 2.6: FLOP is terminal
+        }
+
+        // Hand is over if betting is complete on the final street
+        if (isBettingRoundComplete() && street == finalStreet) {
             return true
         }
 
