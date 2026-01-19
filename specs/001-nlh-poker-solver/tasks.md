@@ -231,11 +231,11 @@ Phase 7: Polish & Cross-Cutting Concerns
 
 ## Phase 2.7: Abstraction Development
 
-**Goal**: Build the abstraction layers required for tractable full game tree solving: board isomorphism and progressive hand bucketing.
+**Goal**: Build the abstraction layers required for tractable full game tree solving: board isomorphism and range-based bucketing.
 
-**Why**: Full game tree (preflop → flop → turn → river) is intractable without abstraction. These techniques reduce complexity by 10-100x while preserving solution quality.
+**Why**: Full game tree (preflop → flop → turn → river) is intractable without abstraction. These techniques reduce complexity by 10-100x while preserving solution quality. This phase enhances the existing PostflopBucketing to work with the range-based solving approach.
 
-**Tasks**: 14
+**Tasks**: 11
 
 ### Board Isomorphism
 - [ ] T230 [P2.7] Implement suit canonicalization for boards in src/main/kotlin/com/nlhsolver/poker/BoardCanonicalizer.kt
@@ -249,19 +249,19 @@ Phase 7: Polish & Cross-Cutting Concerns
 - [ ] T236 [P2.7] Implement river card clustering (group by final hand strength distribution) in src/main/kotlin/com/nlhsolver/poker/RiverClustering.kt
 - [ ] T237 [P2.7] Add configurable cluster count for turn/river (default: 10-15 clusters per street)
 
-### Progressive Hand Bucketing
-- [ ] T238 [P2.7] Implement flop hand bucketing by equity + draw potential in src/main/kotlin/com/nlhsolver/poker/FlopHandBucketing.kt
-- [ ] T239 [P2.7] Implement turn hand bucketing (equity against opponent range) in src/main/kotlin/com/nlhsolver/poker/TurnHandBucketing.kt
-- [ ] T240 [P2.7] Implement river hand bucketing (pure showdown equity) in src/main/kotlin/com/nlhsolver/poker/RiverHandBucketing.kt
-- [ ] T241 [P2.7] Add configurable bucket counts per street (default: 50 flop, 30 turn, 20 river)
+### Range-Based Bucketing Enhancement
+- [ ] T238 [P2.7] Add equity histogram calculation to PostflopBucketing (equity distribution vs opponent range) in PostflopBucketing.kt
+- [ ] T239 [P2.7] Implement street-specific bucket counts in PostflopBucketing (50 flop, 30 turn, 20 river) replacing fixed 200
+- [ ] T240 [P2.7] Add draw potential features for flop bucketing (flush draws, straight draws, pair draws) in PostflopBucketing.kt
 
 ### Integration & Verification
-- [ ] T242 [P2.7] Integrate board isomorphism + hand bucketing into GameTreeBuilder
-- [ ] T243 [P2.7] Benchmark abstraction quality: compare solve results with/without abstraction on test scenarios
+- [ ] T241 [P2.7] Integrate board isomorphism + range bucketing into SolveOrchestrator for full game tree
+- [ ] T242 [P2.7] Benchmark abstraction quality: compare solve results with/without abstraction on test scenarios
 
 **Completion Criteria**:
 - Board isomorphism reduces flop count from 22,100 → ~1,755 canonical boards
-- Hand bucketing reduces per-street hand combos from 1,100 → 50-100 buckets
+- PostflopBucketing uses street-specific bucket counts (50/30/20 instead of fixed 200)
+- Range-based solving works with board isomorphism (canonical boards + remapped hands)
 - Abstracted game tree fits in <8GB RAM for full preflop→river tree
 - Benchmark shows <5% strategy deviation vs no-abstraction baseline on test boards
 
