@@ -4,9 +4,14 @@ import com.nlhsolver.core.GameStateHash
 import com.nlhsolver.core.PokerGameState
 import com.nlhsolver.core.StrategyProfile as CoreStrategyProfile
 import com.nlhsolver.poker.Action
+import com.nlhsolver.poker.Card
 import com.nlhsolver.poker.Position
+import com.nlhsolver.poker.PostflopBucketing
 import com.nlhsolver.poker.PreflopBuckets
 import com.nlhsolver.poker.PreflopBuckets.PreflopHand
+import com.nlhsolver.poker.Rank
+import com.nlhsolver.poker.Street
+import com.nlhsolver.poker.Suit
 import com.nlhsolver.storage.StrategyRepository
 import java.util.UUID
 
@@ -169,8 +174,14 @@ class StrategyQueryService(
             throw IllegalArgumentException("Invalid hand notation: $handNotation. Use format like 'AKs', 'QQ', '72o'")
         }
 
-        // Get bucket ID for this hand
-        val bucketId = PreflopBuckets.getBucketId(hand)
+        // Get bucket ID for this hand - use appropriate bucketing for the street
+        val bucketId = if (street == Street.PREFLOP) {
+            PreflopBuckets.getBucketId(hand)
+        } else {
+            // For postflop, convert to representative cards and use equity-based bucketing
+            val cards = handToRepresentativeCards(hand, board)
+            PostflopBucketing(numBuckets = 200).getBucket(cards, board, street)
+        }
 
         // Load strategy data
         if (!strategyRepository.exists(strategyId)) {
@@ -189,7 +200,10 @@ class StrategyQueryService(
 
         // Find all info sets for this bucket at the specified street
         // Info sets are formatted like: "p0:bucket=X:street=PREFLOP:board=:..."
-        val playerIndex = if (position == Position.BTN) 0 else 1
+        // Player index is determined by Position ordinal sort: BB (ordinal 2) < BTN (ordinal 0) is false
+        // Sorted positions = [BTN, BB] for preflop, [BB, BTN] for postflop (BB acts first)
+        // For heads-up postflop: p0 = BB, p1 = BTN
+        val playerIndex = if (position == Position.BTN) 1 else 0
         val matchingInfoSets = coreStrategyProfile.getAllInfoSets()
             .filter { infoSet ->
                 infoSet.infoSet.contains("p$playerIndex:") &&
@@ -345,6 +359,67 @@ class StrategyQueryService(
                 else -> (0 until numActions).map { "action$it" }
             }
         }
+    }
+
+    /**
+     * Convert a PreflopHand notation to representative cards, avoiding board conflicts.
+     *
+     * @param hand The canonical hand (e.g., AKs, QQ, 72o)
+     * @param board Board cards to avoid
+     * @return A pair of cards representing this hand
+     */
+    private fun handToRepresentativeCards(hand: PreflopHand, board: List<Card>): Pair<Card, Card> {
+        val boardCards = board.toSet()
+        val suits = listOf(Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS)
+
+        // For pairs (e.g., AA, KK)
+        if (hand.highRank == hand.lowRank) {
+            // Find two suits that don't conflict with the board
+            val availableSuits = suits.filter { suit ->
+                Card(hand.highRank, suit) !in boardCards
+            }
+            require(availableSuits.size >= 2) {
+                "Cannot create representative cards for ${hand.notation} - too many board conflicts"
+            }
+            return Pair(
+                Card(hand.highRank, availableSuits[0]),
+                Card(hand.highRank, availableSuits[1])
+            )
+        }
+
+        // For suited hands (e.g., AKs)
+        if (hand.suitedness == PreflopBuckets.Suitedness.SUITED) {
+            // Find a suit where both cards don't conflict with the board
+            for (suit in suits) {
+                val highCard = Card(hand.highRank, suit)
+                val lowCard = Card(hand.lowRank, suit)
+                if (highCard !in boardCards && lowCard !in boardCards) {
+                    return Pair(highCard, lowCard)
+                }
+            }
+            throw IllegalArgumentException(
+                "Cannot create representative cards for ${hand.notation} - all suits conflict with board"
+            )
+        }
+
+        // For offsuit hands (e.g., AKo, 72o)
+        // Use different suits, avoiding board conflicts
+        for (highSuit in suits) {
+            val highCard = Card(hand.highRank, highSuit)
+            if (highCard in boardCards) continue
+
+            for (lowSuit in suits) {
+                if (lowSuit == highSuit) continue  // Must be different suits for offsuit
+                val lowCard = Card(hand.lowRank, lowSuit)
+                if (lowCard !in boardCards) {
+                    return Pair(highCard, lowCard)
+                }
+            }
+        }
+
+        throw IllegalArgumentException(
+            "Cannot create representative cards for ${hand.notation} - too many board conflicts"
+        )
     }
 }
 
