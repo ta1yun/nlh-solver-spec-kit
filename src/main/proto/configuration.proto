@@ -80,9 +80,12 @@ message BetSizePb {
  * Hand abstraction configuration.
  */
 message HandAbstractionPb {
-  // Number of buckets for each street
-  int32 preflop_buckets = 1;
-  int32 flop_buckets = 2;
-  int32 turn_buckets = 3;
-  int32 river_buckets = 4;
+  // Abstraction mode: NONE, EQUITY_BUCKETING, or AUTO
+  string mode = 1;
+
+  // Number of buckets (used when mode = EQUITY_BUCKETING)
+  int32 num_buckets = 2;
+
+  // Bucketing method: EQUITY_HISTOGRAM or POTENTIAL_AWARE
+  string bucketing_method = 3;
 }

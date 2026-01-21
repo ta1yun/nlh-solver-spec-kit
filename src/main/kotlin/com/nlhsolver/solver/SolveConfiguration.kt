@@ -93,7 +93,19 @@ data class SolveConfiguration(
      * BB's investment on current street.
      * Default: 0.0
      */
-    val bbInvested: Double = 0.0
+    val bbInvested: Double = 0.0,
+
+    // === Action Tree Configuration ===
+    /**
+     * Maximum number of raises allowed per street.
+     * - 0 = no raises (only bet/call/fold) - useful for testing classic poker theory
+     * - 1 = one raise allowed (bet, raise, no re-raise)
+     * - 2+ = multiple raises allowed (default: 2)
+     *
+     * Note: "raises" includes both initial bets and subsequent raises in the count.
+     * Setting to 0 creates a simplified game tree for polarized vs condensed scenarios.
+     */
+    val maxRaisesPerStreet: Int = 2
 ) {
     init {
         // Existing validation
@@ -170,7 +182,8 @@ data class SolveConfiguration(
             btnInvested: Double = 0.0,
             bbInvested: Double = 0.0,
             convergenceCriteria: ConvergenceCriteria = ConvergenceCriteria(),
-            name: String = "River Solve"
+            name: String = "River Solve",
+            maxRaisesPerStreet: Int = 2
         ): SolveConfiguration {
             require(board.size == 5) { "River requires exactly 5 board cards (got ${board.size})" }
             return SolveConfiguration(
@@ -185,7 +198,8 @@ data class SolveConfiguration(
                 bbRange = bbRange,
                 pot = pot,
                 btnInvested = btnInvested,
-                bbInvested = bbInvested
+                bbInvested = bbInvested,
+                maxRaisesPerStreet = maxRaisesPerStreet
             )
         }
     }

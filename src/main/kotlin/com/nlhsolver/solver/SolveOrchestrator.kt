@@ -74,6 +74,12 @@ class SolveOrchestrator(
         }
         val totalWeight = allMatchups.sumOf { it.weight }
 
+        // Determine effective abstraction mode based on range sizes
+        val btnRangeSize = (configuration.btnRange as? HandRange.WeightedRange)?.size() ?: 169
+        val bbRangeSize = (configuration.bbRange as? HandRange.WeightedRange)?.size() ?: 169
+        val effectiveMode = configuration.handAbstraction.effectiveMode(btnRangeSize, bbRangeSize)
+        val numBuckets = configuration.handAbstraction.numBuckets
+
         // Create root states with weight information for each matchup
         data class WeightedRootState(
             val state: PokerGameState,
@@ -92,7 +98,10 @@ class SolveOrchestrator(
                     bbStack = configuration.stackSizes[com.nlhsolver.poker.Position.BB] ?: 50.0,
                     pot = configuration.pot,
                     btnInvested = configuration.btnInvested,
-                    bbInvested = configuration.bbInvested
+                    bbInvested = configuration.bbInvested,
+                    abstractionMode = effectiveMode,
+                    numBuckets = numBuckets,
+                    maxRaisesPerStreet = configuration.maxRaisesPerStreet
                 ),
                 matchup = matchup,
                 normalizedWeight = matchup.weight / totalWeight
@@ -104,6 +113,7 @@ class SolveOrchestrator(
         println("  Total matchups: ${allMatchups.size}")
         println("  Total weight: ${"%.2f".format(totalWeight)}")
         println("  Pot: ${configuration.pot}")
+        println("  Abstraction mode: ${effectiveMode.name}${if (effectiveMode == AbstractionMode.EQUITY_BUCKETING) " ($numBuckets buckets)" else ""}")
 
         // Start convergence monitoring
         convergenceMonitor.start()
@@ -136,12 +146,14 @@ class SolveOrchestrator(
                 weightSum += weightedState.normalizedWeight
             }
 
-            val avgExploitability = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
+            val avgExploitabilityChips = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
+            // Normalize exploitability by pot size to get a percentage (e.g., 3.7 chips / 20 pot = 0.185 = 18.5%)
+            val avgExploitability = avgExploitabilityChips / configuration.pot
 
             // Debug: Log exploitability on first check
             if (currentIteration == configuration.convergenceCriteria.evaluationFrequency) {
                 println("DEBUG: First exploitability check at iteration $currentIteration")
-                println("  Weighted average exploitability: ${"%.4f".format(avgExploitability)}")
+                println("  Weighted average exploitability: ${"%.4f".format(avgExploitability)} (${"%.2f".format(avgExploitability * 100)}%)")
                 println("  Total matchups evaluated: ${weightedStates.size}")
             }
 

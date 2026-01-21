@@ -21,7 +21,7 @@ import java.util.UUID
  */
 class GameTreeBuilder(
     private val config: SolveConfiguration,
-    private val postflopBucketing: PostflopBucketing = PostflopBucketing.create(config.handAbstraction.flopBuckets)
+    private val postflopBucketing: PostflopBucketing = PostflopBucketing.create(config.handAbstraction.numBuckets)
 ) {
     private val positions = config.stackSizes.keys.sortedBy { it.ordinal }
 

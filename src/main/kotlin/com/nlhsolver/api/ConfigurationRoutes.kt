@@ -58,10 +58,10 @@ fun Route.configurationRoutes(configRepository: ConfigurationRepository) {
                     } ?: listOf(BetSize.PotRelative(0.5), BetSize.PotRelative(1.0), BetSize.AllIn)
                 ),
                 handAbstraction = HandAbstraction(
-                    preflopBuckets = request.preflopBuckets ?: 169,
-                    flopBuckets = request.flopBuckets ?: 200,
-                    turnBuckets = request.turnBuckets ?: 200,
-                    riverBuckets = request.riverBuckets ?: 200
+                    mode = request.abstractionMode?.let {
+                        try { AbstractionMode.valueOf(it) } catch (e: Exception) { AbstractionMode.AUTO }
+                    } ?: AbstractionMode.AUTO,
+                    numBuckets = request.numBuckets ?: 200
                 )
             )
 
@@ -127,10 +127,8 @@ data class CreateConfigurationRequest(
     val evaluationFrequency: Int? = null,
     val timeoutHours: Int? = null,
     val betSizes: List<String>? = null,
-    val preflopBuckets: Int? = null,
-    val flopBuckets: Int? = null,
-    val turnBuckets: Int? = null,
-    val riverBuckets: Int? = null
+    val abstractionMode: String? = null,  // NONE, EQUITY_BUCKETING, or AUTO
+    val numBuckets: Int? = null
 )
 
 /**
@@ -155,10 +153,8 @@ data class ConfigurationResponse(
 
 @kotlinx.serialization.Serializable
 data class HandAbstractionResponse(
-    val preflopBuckets: Int,
-    val flopBuckets: Int,
-    val turnBuckets: Int,
-    val riverBuckets: Int
+    val mode: String,
+    val numBuckets: Int
 )
 
 /**
@@ -182,10 +178,8 @@ private fun toResponse(config: SolveConfiguration): ConfigurationResponse {
             }
         },
         handAbstraction = HandAbstractionResponse(
-            preflopBuckets = config.handAbstraction.preflopBuckets,
-            flopBuckets = config.handAbstraction.flopBuckets,
-            turnBuckets = config.handAbstraction.turnBuckets,
-            riverBuckets = config.handAbstraction.riverBuckets
+            mode = config.handAbstraction.mode.name,
+            numBuckets = config.handAbstraction.numBuckets
         ),
         createdAt = config.createdAt.toString(),
         updatedAt = config.updatedAt.toString()

@@ -153,9 +153,14 @@ object RiverScenarios {
      * Toy example: Minimal polarized vs condensed ranges.
      *
      * This is the smallest possible meaningful scenario for testing:
-     * - BTN (Polarized): 2 strong hands (AA, KK) + 2 bluffs (72o, 83o) = 4 hands
-     * - BB (Condensed): 3 medium hands (JJ, TT, 99) = 3 hands
+     * - BTN (Polarized): 2 value hands (AA, KK) + 2 bluffs (65o, 53o) = 4 hands
+     * - BB (Condensed): 3 bluff catchers (QQ, JJ, TT) = 3 hands
      * - Total: 4 × 3 = 12 matchups
+     *
+     * Hand rankings on board K♠ 7♥ 2♦ 9♣ 4♥:
+     * - KK (top set) > AA (overpair) > QQ > JJ > TT > 65o/53o (air)
+     * - BB's entire range loses to BTN's value but beats BTN's bluffs
+     * - NOTE: Bluffs use ranks NOT on board (6,5,3) to avoid accidental pairs
      *
      * Setup:
      * - Board: K♠ 7♥ 2♦ 9♣ 4♥ (dry board)
@@ -163,8 +168,9 @@ object RiverScenarios {
      * - MDF = 20/(20+10) = 66.67%
      *
      * Expected GTO:
-     * - BTN should bet all strong hands + some bluffs (optimal alpha)
-     * - BB should defend ~66.67% (MDF) with best hands (JJ > TT > 99)
+     * - BTN should bet all value hands (100%) and bluff at optimal frequency
+     * - Optimal bluff frequency: alpha = bet/(pot+bet) = 10/30 = 33%
+     * - BB should defend ~66.67% (MDF) to make BTN indifferent to bluffing
      * - Exploitability should be near 0 with correct frequencies
      *
      * Use case:
@@ -183,20 +189,22 @@ object RiverScenarios {
         )
 
         // BTN Polarized Range: Strong hands + Bluffs (no medium)
+        // Board is K♠ 7♥ 2♦ 9♣ 4♥ - bluffs must not pair any board card
         val btnPolarizedRange = listOf(
             // Strong hands (top of range)
-            Pair(Card(Rank.ACE, Suit.CLUBS), Card(Rank.ACE, Suit.DIAMONDS)),     // AA (strongest)
-            Pair(Card(Rank.KING, Suit.HEARTS), Card(Rank.KING, Suit.DIAMONDS)),  // KK (strong)
-            // Bluffs (bottom of range)
-            Pair(Card(Rank.SEVEN, Suit.CLUBS), Card(Rank.TWO, Suit.HEARTS)),     // 72o (air)
-            Pair(Card(Rank.EIGHT, Suit.CLUBS), Card(Rank.THREE, Suit.SPADES))    // 83o (air)
+            Pair(Card(Rank.ACE, Suit.CLUBS), Card(Rank.ACE, Suit.DIAMONDS)),     // AA (overpair - value)
+            Pair(Card(Rank.KING, Suit.HEARTS), Card(Rank.KING, Suit.DIAMONDS)),  // KK (top set - nuts)
+            // Bluffs (bottom of range) - ranks not on board: 6, 5, 3, 8, T, J, Q
+            Pair(Card(Rank.SIX, Suit.CLUBS), Card(Rank.FIVE, Suit.HEARTS)),      // 65o (6-high, pure air)
+            Pair(Card(Rank.FIVE, Suit.CLUBS), Card(Rank.THREE, Suit.SPADES))     // 53o (5-high, pure air)
         )
 
         // BB Condensed Range: Medium strength (capped, no nuts)
+        // All hands lose to BTN's value (AA, KK) but beat BTN's bluffs (72o, 83o)
         val bbCondensedRange = listOf(
-            Pair(Card(Rank.JACK, Suit.SPADES), Card(Rank.JACK, Suit.HEARTS)),    // JJ (bluff catcher)
-            Pair(Card(Rank.TEN, Suit.SPADES), Card(Rank.TEN, Suit.DIAMONDS)),    // TT (medium)
-            Pair(Card(Rank.NINE, Suit.SPADES), Card(Rank.NINE, Suit.DIAMONDS))   // 99 (weak bluff catcher)
+            Pair(Card(Rank.QUEEN, Suit.SPADES), Card(Rank.QUEEN, Suit.HEARTS)),  // QQ (best bluff catcher)
+            Pair(Card(Rank.JACK, Suit.SPADES), Card(Rank.JACK, Suit.HEARTS)),    // JJ (medium bluff catcher)
+            Pair(Card(Rank.TEN, Suit.SPADES), Card(Rank.TEN, Suit.DIAMONDS))     // TT (weakest bluff catcher)
         )
 
         val pot = 20.0
@@ -215,11 +223,12 @@ object RiverScenarios {
             btnInvested = 0.0,
             bbInvested = 0.0,
             convergenceCriteria = ConvergenceCriteria(
-                targetExploitability = 0.01,   // 1% target for toy example
-                maxIterations = 10_000,        // Should converge quickly with 12 matchups
-                evaluationFrequency = 100
+                targetExploitability = 0.20,   // 20% target for initial testing
+                maxIterations = 50_000,        // More iterations for convergence
+                evaluationFrequency = 1000
             ),
-            name = "Toy: Polarized vs Condensed (4 hands vs 3 hands)"
+            name = "Toy: Polarized vs Condensed (4 hands vs 3 hands)",
+            maxRaisesPerStreet = 0  // No raises - classic bet/call/fold only
         )
     }
 

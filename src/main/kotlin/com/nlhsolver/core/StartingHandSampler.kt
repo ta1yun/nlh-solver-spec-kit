@@ -3,6 +3,8 @@ package com.nlhsolver.core
 import com.nlhsolver.poker.*
 import com.nlhsolver.poker.PreflopBuckets.PreflopHand
 import com.nlhsolver.poker.PreflopBuckets.Suitedness
+import com.nlhsolver.solver.AbstractionMode
+import com.nlhsolver.solver.HandIdentifier
 import com.nlhsolver.solver.HandRange
 
 /**
@@ -148,6 +150,8 @@ object StartingHandSampler {
      * @param pot Current pot size
      * @param btnInvested BTN's investment on current street
      * @param bbInvested BB's investment on current street
+     * @param abstractionMode How to identify hands in info sets (NONE for exact, EQUITY_BUCKETING for buckets)
+     * @param numBuckets Number of buckets when using EQUITY_BUCKETING mode
      * @return PokerGameState at the specified street
      */
     fun createGameState(
@@ -159,25 +163,42 @@ object StartingHandSampler {
         bbStack: Double,
         pot: Double,
         btnInvested: Double = 0.0,
-        bbInvested: Double = 0.0
+        bbInvested: Double = 0.0,
+        abstractionMode: AbstractionMode = AbstractionMode.EQUITY_BUCKETING,
+        numBuckets: Int = 200,
+        maxRaisesPerStreet: Int = 2
     ): PokerGameState {
         require(board.size == street.boardCardCount) {
             "Board must have ${street.boardCardCount} cards for ${street.name} (has ${board.size})"
         }
 
-        // Calculate bucket IDs based on street
-        val btnBucket = if (street == Street.PREFLOP) {
-            PreflopBuckets.getBucketId(btnHand.first, btnHand.second)
-        } else {
-            val bucketing = PostflopBucketing(numBuckets = 200)
-            bucketing.getBucket(btnHand, board, street)
-        }
-
-        val bbBucket = if (street == Street.PREFLOP) {
-            PreflopBuckets.getBucketId(bbHand.first, bbHand.second)
-        } else {
-            val bucketing = PostflopBucketing(numBuckets = 200)
-            bucketing.getBucket(bbHand, board, street)
+        // Create hand identifiers based on abstraction mode
+        val (btnIdentifier, bbIdentifier) = when (abstractionMode) {
+            AbstractionMode.NONE -> {
+                // Use exact hand identity - no bucketing
+                Pair(
+                    HandIdentifier.ExactHand(btnHand.first, btnHand.second),
+                    HandIdentifier.ExactHand(bbHand.first, bbHand.second)
+                )
+            }
+            AbstractionMode.EQUITY_BUCKETING, AbstractionMode.AUTO -> {
+                // Use equity-based bucketing
+                val bucketing = PostflopBucketing(numBuckets = numBuckets)
+                val btnBucket = if (street == Street.PREFLOP) {
+                    PreflopBuckets.getBucketId(btnHand.first, btnHand.second)
+                } else {
+                    bucketing.getBucket(btnHand, board, street)
+                }
+                val bbBucket = if (street == Street.PREFLOP) {
+                    PreflopBuckets.getBucketId(bbHand.first, bbHand.second)
+                } else {
+                    bucketing.getBucket(bbHand, board, street)
+                }
+                Pair(
+                    HandIdentifier.Bucket(btnBucket),
+                    HandIdentifier.Bucket(bbBucket)
+                )
+            }
         }
 
         // Create player states
@@ -187,14 +208,14 @@ object StartingHandSampler {
                 stackBb = btnStack,
                 investedThisRound = btnInvested,
                 holeCards = btnHand,
-                handRange = btnBucket
+                handIdentifier = btnIdentifier
             ),
             Position.BB to PokerPlayerState(
                 position = Position.BB,
                 stackBb = bbStack,
                 investedThisRound = bbInvested,
                 holeCards = bbHand,
-                handRange = bbBucket
+                handIdentifier = bbIdentifier
             )
         )
 
@@ -215,7 +236,8 @@ object StartingHandSampler {
             board = board,
             pot = pot,
             playerStates = playerStates,
-            actionHistory = actionHistory
+            actionHistory = actionHistory,
+            maxRaisesPerStreet = maxRaisesPerStreet
         )
     }
 
@@ -389,33 +411,49 @@ object StartingHandSampler {
      * @param bbCards BB's hole cards
      * @param btnStack BTN stack size in BB
      * @param bbStack BB stack size in BB
-     * @return PokerGameState with hole cards and buckets assigned
+     * @param abstractionMode How to identify hands in info sets
+     * @return PokerGameState with hole cards and hand identifiers assigned
      */
     fun createStartingState(
         btnCards: Pair<Card, Card>,
         bbCards: Pair<Card, Card>,
         btnStack: Double = 50.0,
-        bbStack: Double = 50.0
+        bbStack: Double = 50.0,
+        abstractionMode: AbstractionMode = AbstractionMode.EQUITY_BUCKETING
     ): PokerGameState {
-        // Calculate preflop buckets
-        val btnBucket = PreflopBuckets.getBucketId(btnCards.first, btnCards.second)
-        val bbBucket = PreflopBuckets.getBucketId(bbCards.first, bbCards.second)
+        // Create hand identifiers based on abstraction mode
+        val (btnIdentifier, bbIdentifier) = when (abstractionMode) {
+            AbstractionMode.NONE -> {
+                Pair(
+                    HandIdentifier.ExactHand(btnCards.first, btnCards.second),
+                    HandIdentifier.ExactHand(bbCards.first, bbCards.second)
+                )
+            }
+            AbstractionMode.EQUITY_BUCKETING, AbstractionMode.AUTO -> {
+                val btnBucket = PreflopBuckets.getBucketId(btnCards.first, btnCards.second)
+                val bbBucket = PreflopBuckets.getBucketId(bbCards.first, bbCards.second)
+                Pair(
+                    HandIdentifier.Bucket(btnBucket),
+                    HandIdentifier.Bucket(bbBucket)
+                )
+            }
+        }
 
-        // Create player states with hole cards and buckets
+        // Create player states with hole cards and hand identifiers
         val playerStates = mapOf(
             Position.BTN to PokerPlayerState(
                 position = Position.BTN,
                 stackBb = btnStack - 0.5,  // Posted small blind
                 investedThisRound = 0.5,    // Small blind
                 holeCards = btnCards,
-                handRange = btnBucket
+                handIdentifier = btnIdentifier
             ),
             Position.BB to PokerPlayerState(
                 position = Position.BB,
                 stackBb = bbStack - 1.0,  // Posted big blind
                 investedThisRound = 1.0,    // Big blind
                 holeCards = bbCards,
-                handRange = bbBucket
+                handIdentifier = bbIdentifier
             )
         )
 

@@ -25,7 +25,13 @@ data class PokerGameState(
     val board: List<Card>,
     val pot: Double,
     val playerStates: Map<Position, PokerPlayerState>,
-    val actionHistory: List<HistoricalAction> = emptyList()
+    val actionHistory: List<HistoricalAction> = emptyList(),
+    /**
+     * Maximum raises allowed per street.
+     * - 0 = no raises (only bet/call/fold)
+     * - 2 = default (bet, raise, re-raise)
+     */
+    val maxRaisesPerStreet: Int = 2
 ) : GameState {
     init {
         // VR-019: Board size must match street
@@ -263,11 +269,12 @@ data class PokerGameState(
 
         // Calculate each player's total investment
         // Total invested = starting stack - current stack
+        // Note: investedThisRound tracks betting within the current street for matching bets
+        // but is already reflected in the reduced stackBb, so we just use stackBb
         val initialStackBb = 50.0  // TODO: Get from configuration
         val totalInvested = allPositions.associateWith { pos ->
             val playerState = playerStates[pos]!!
-            val currentTotal = playerState.stackBb + playerState.investedThisRound
-            initialStackBb - currentTotal
+            initialStackBb - playerState.stackBb
         }
 
         // All folded except one - winner takes pot
@@ -306,30 +313,35 @@ data class PokerGameState(
                         // River: 7 cards (2 hole + 5 board)
                         HandEvaluator.evaluateBest7(allCards)
                     } else {
-                        // Turn: 6 cards - fall back to bucket ID for now
-                        val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
-                        return@associateWith (168.0 - bucketId.toDouble())
+                        // Turn: 6 cards - use evaluateBest7 with padding or fall back
+                        // For now, use simplified evaluation
+                        HandEvaluator.evaluate(allCards.take(5))
                     }
-                    // Compute numeric value: type strength * 10000 + primary ranks + kickers
-                    // This ensures proper ordering while maintaining comparability
-                    var score = handRank.type.strength * 1_000_000.0
+                    // Compute numeric value: type strength dominates, then primary ranks, then kickers
+                    // Hand type strength must be the most significant factor
+                    // Use base-15 positional system to ensure proper ordering:
+                    // - Hand type: multiplied by 15^8 (~2.5 billion) to always dominate
+                    // - Primary ranks: multiplied by 15^(6-i) to properly order within hand type
+                    // - Kickers: multiplied by 15^(2-i) for tiebreakers
+                    var score = handRank.type.strength * 2_562_890_625.0  // 15^8
                     handRank.primaryRanks.forEachIndexed { i, rank ->
-                        score += rank.value * Math.pow(100.0, (4 - i).toDouble())
+                        score += rank.value * Math.pow(15.0, (6 - i).toDouble())
                     }
                     handRank.kickers.forEachIndexed { i, rank ->
-                        score += rank.value * Math.pow(10.0, (3 - i).toDouble())
+                        score += rank.value * Math.pow(15.0, (2 - i).toDouble())
                     }
                     score
                 } catch (e: Exception) {
-                    // Fall back to bucket ID if evaluation fails
-                    val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
-                    (168.0 - bucketId.toDouble())
+                    // Fall back to hand rank based on high cards if evaluation fails
+                    val highCard = maxOf(playerState.holeCards!!.first.rank.value,
+                                         playerState.holeCards.second.rank.value)
+                    highCard.toDouble()
                 }
             } else {
-                // Preflop-only: use bucket IDs as proxy for hand strength
-                // Bucket 0 = AA (strongest), Bucket 168 = 72o (weakest)
-                val bucketId = playerState.handRange ?: return@associateWith Double.NEGATIVE_INFINITY
-                (168.0 - bucketId.toDouble())
+                // Preflop-only: use hand rank based on high cards
+                val highCard = maxOf(playerState.holeCards!!.first.rank.value,
+                                     playerState.holeCards.second.rank.value)
+                highCard.toDouble()
             }
         }
 
@@ -370,7 +382,6 @@ data class PokerGameState(
         val raisesThisStreet = actionHistory
             .filter { it.action is Action.Bet || it.action is Action.Raise }
             .count()
-        val maxRaisesPerStreet = 2
 
         // FOLD: Available if there's a bet to face
         if (amountToCall > 0.0) {
@@ -387,12 +398,13 @@ data class PokerGameState(
             actions.add(SimpleGameAction("call", "Call"))
         }
 
-        // BET/RAISE: Only if we haven't exceeded raise limit
-        if (raisesThisStreet < maxRaisesPerStreet) {
-            // For now, just offer pot-sized bet/raise
-            if (amountToCall == 0.0 && playerState.stackBb > 0.0) {
-                actions.add(SimpleGameAction("bet", "Bet"))
-            } else if (amountToCall > 0.0 && playerState.stackBb > amountToCall) {
+        // BET/RAISE: Controlled by maxRaisesPerStreet
+        if (amountToCall == 0.0 && playerState.stackBb > 0.0) {
+            // BET: Always available when not facing a bet
+            actions.add(SimpleGameAction("bet", "Bet"))
+        } else if (amountToCall > 0.0 && playerState.stackBb > amountToCall) {
+            // RAISE: Only if under raise limit (maxRaisesPerStreet=0 means no raises)
+            if (raisesThisStreet < maxRaisesPerStreet) {
                 actions.add(SimpleGameAction("raise", "Raise"))
             }
         }
@@ -539,7 +551,7 @@ data class PokerGameState(
 
     override fun getInfoSet(): String {
         // Information set represents what the current player knows
-        // Includes their hole cards (via hand bucket), board cards, and action history
+        // Includes their hand identifier (exact or bucket), board cards, and action history
         val player = currentPlayer() ?: return "terminal"
 
         // Convert player index to position
@@ -547,9 +559,12 @@ data class PokerGameState(
         val position = allPositions[player]
         val playerState = playerStates[position]
 
+        // Get hand identifier key (either "hand=AcKd" or "bucket=42")
+        val handKey = playerState?.handIdentifier?.toInfoSetKey() ?: "unknown"
+
         return buildString {
             append("p${player}:")
-            append("bucket=${playerState?.handRange ?: "unknown"}:")
+            append("$handKey:")
             append("street=${street.name}:")
             append("board=${board.joinToString(",") { "${it.rank}${it.suit}" }}:")
             append("pot=$pot:")
@@ -565,7 +580,7 @@ data class PokerGameState(
  * @property stackBb Remaining stack in big blinds
  * @property investedThisRound Amount invested in current betting round
  * @property holeCards Player's hole cards (null if not yet dealt or unknown)
- * @property handRange Hand bucket for abstraction (null if exact hand known)
+ * @property handIdentifier Hand identifier for info set generation (exact hand or bucket)
  * @property isFolded Whether player has folded
  * @property isAllIn Whether player is all-in
  */
@@ -574,7 +589,7 @@ data class PokerPlayerState(
     val stackBb: Double,
     val investedThisRound: Double = 0.0,
     val holeCards: Pair<Card, Card>? = null,  // Player's two hole cards
-    val handRange: Int? = null,  // Hand bucket ID for abstraction (computed from holeCards)
+    val handIdentifier: com.nlhsolver.solver.HandIdentifier? = null,  // Exact hand or bucket for info sets
     val isFolded: Boolean = false,
     val isAllIn: Boolean = false
 ) {

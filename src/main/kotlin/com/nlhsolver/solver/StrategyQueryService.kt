@@ -164,23 +164,14 @@ class StrategyQueryService(
         strategyId: UUID,
         handNotation: String,
         position: Position = Position.BTN,
-        street: com.nlhsolver.poker.Street = com.nlhsolver.poker.Street.PREFLOP,
-        board: List<com.nlhsolver.poker.Card> = emptyList()
+        street: Street = Street.PREFLOP,
+        board: List<Card> = emptyList()
     ): CanonicalHandQueryResult {
         // Parse hand notation
         val hand = try {
             PreflopHand.fromNotation(handNotation)
         } catch (e: Exception) {
             throw IllegalArgumentException("Invalid hand notation: $handNotation. Use format like 'AKs', 'QQ', '72o'")
-        }
-
-        // Get bucket ID for this hand - use appropriate bucketing for the street
-        val bucketId = if (street == Street.PREFLOP) {
-            PreflopBuckets.getBucketId(hand)
-        } else {
-            // For postflop, convert to representative cards and use equity-based bucketing
-            val cards = handToRepresentativeCards(hand, board)
-            PostflopBucketing(numBuckets = 200).getBucket(cards, board, street)
         }
 
         // Load strategy data
@@ -198,20 +189,44 @@ class StrategyQueryService(
             ""
         }
 
-        // Find all info sets for this bucket at the specified street
-        // Info sets are formatted like: "p0:bucket=X:street=PREFLOP:board=:..."
-        // Player index is determined by Position ordinal sort: BB (ordinal 2) < BTN (ordinal 0) is false
-        // Sorted positions = [BTN, BB] for preflop, [BB, BTN] for postflop (BB acts first)
-        // For heads-up postflop: p0 = BB, p1 = BTN
+        // Player index: For heads-up postflop, p0 = BB, p1 = BTN
         val playerIndex = if (position == Position.BTN) 1 else 0
-        val matchingInfoSets = coreStrategyProfile.getAllInfoSets()
+
+        // First, try to find info sets using exact hand notation (NONE mode)
+        // Generate all specific card combos for this canonical hand
+        val exactHandKeys = generateExactHandKeys(hand, board)
+
+        var matchingInfoSets = coreStrategyProfile.getAllInfoSets()
             .filter { infoSet ->
                 infoSet.infoSet.contains("p$playerIndex:") &&
-                infoSet.infoSet.contains("bucket=$bucketId:") &&
+                exactHandKeys.any { handKey -> infoSet.infoSet.contains("hand=$handKey:") } &&
                 infoSet.infoSet.contains("street=$street") &&
-                (street == com.nlhsolver.poker.Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
+                (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
             }
             .toList()
+
+        // If no exact hand matches, fall back to bucket-based search
+        val bucketId: Int
+        if (matchingInfoSets.isEmpty()) {
+            bucketId = if (street == Street.PREFLOP) {
+                PreflopBuckets.getBucketId(hand)
+            } else {
+                val cards = handToRepresentativeCards(hand, board)
+                PostflopBucketing(numBuckets = 200).getBucket(cards, board, street)
+            }
+
+            matchingInfoSets = coreStrategyProfile.getAllInfoSets()
+                .filter { infoSet ->
+                    infoSet.infoSet.contains("p$playerIndex:") &&
+                    infoSet.infoSet.contains("bucket=$bucketId:") &&
+                    infoSet.infoSet.contains("street=$street") &&
+                    (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
+                }
+                .toList()
+        } else {
+            // For exact hand matches, bucket ID is not meaningful
+            bucketId = -1
+        }
 
         if (matchingInfoSets.isEmpty()) {
             return CanonicalHandQueryResult(
@@ -420,6 +435,77 @@ class StrategyQueryService(
         throw IllegalArgumentException(
             "Cannot create representative cards for ${hand.notation} - too many board conflicts"
         )
+    }
+
+    /**
+     * Generate all exact hand keys for a canonical hand notation.
+     *
+     * For example, "AA" generates ["AdAc", "AdAh", "AdAs", "AcAh", "AcAs", "AhAs"]
+     * after removing any combos that conflict with the board.
+     *
+     * The key format matches HandIdentifier.ExactHand.toInfoSetKey() which sorts
+     * cards by rank descending, then suit ordinal.
+     *
+     * @param hand The canonical hand (e.g., AKs, QQ, 72o)
+     * @param board Board cards to exclude
+     * @return List of hand key strings (e.g., ["AdKd", "AhKh", ...])
+     */
+    private fun generateExactHandKeys(hand: PreflopHand, board: List<Card>): List<String> {
+        val boardCards = board.toSet()
+        val suits = listOf(Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS)
+        val result = mutableListOf<String>()
+
+        // For pairs (e.g., AA, KK)
+        if (hand.highRank == hand.lowRank) {
+            // Generate all 6 combos (4 choose 2)
+            for (i in suits.indices) {
+                for (j in i + 1 until suits.size) {
+                    val card1 = Card(hand.highRank, suits[i])
+                    val card2 = Card(hand.highRank, suits[j])
+                    if (card1 !in boardCards && card2 !in boardCards) {
+                        // Sort by suit ordinal for pairs (same rank)
+                        val sorted = listOf(card1, card2).sortedBy { it.suit.ordinal }
+                        val key = "${sorted[0].rank.symbol}${sorted[0].suit.symbol}${sorted[1].rank.symbol}${sorted[1].suit.symbol}"
+                        result.add(key)
+                    }
+                }
+            }
+            return result
+        }
+
+        // For suited hands (e.g., AKs)
+        if (hand.suitedness == PreflopBuckets.Suitedness.SUITED) {
+            // Generate 4 combos (one per suit)
+            for (suit in suits) {
+                val highCard = Card(hand.highRank, suit)
+                val lowCard = Card(hand.lowRank, suit)
+                if (highCard !in boardCards && lowCard !in boardCards) {
+                    // High card first (already sorted by rank)
+                    val key = "${highCard.rank.symbol}${highCard.suit.symbol}${lowCard.rank.symbol}${lowCard.suit.symbol}"
+                    result.add(key)
+                }
+            }
+            return result
+        }
+
+        // For offsuit hands (e.g., AKo, 72o)
+        // Generate 12 combos (4 suits for high * 3 different suits for low)
+        for (highSuit in suits) {
+            val highCard = Card(hand.highRank, highSuit)
+            if (highCard in boardCards) continue
+
+            for (lowSuit in suits) {
+                if (lowSuit == highSuit) continue  // Must be different suits for offsuit
+                val lowCard = Card(hand.lowRank, lowSuit)
+                if (lowCard !in boardCards) {
+                    // High card first (already sorted by rank)
+                    val key = "${highCard.rank.symbol}${highCard.suit.symbol}${lowCard.rank.symbol}${lowCard.suit.symbol}"
+                    result.add(key)
+                }
+            }
+        }
+
+        return result
     }
 }
 

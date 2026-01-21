@@ -223,10 +223,9 @@ class ConfigurationRepository(
      */
     private fun toProtobuf(abstraction: HandAbstraction): HandAbstractionPb {
         return HandAbstractionPb.newBuilder()
-            .setPreflopBuckets(abstraction.preflopBuckets)
-            .setFlopBuckets(abstraction.flopBuckets)
-            .setTurnBuckets(abstraction.turnBuckets)
-            .setRiverBuckets(abstraction.riverBuckets)
+            .setMode(abstraction.mode.name)
+            .setNumBuckets(abstraction.numBuckets)
+            .setBucketingMethod(abstraction.bucketingMethod.name)
             .build()
     }
 
@@ -235,10 +234,17 @@ class ConfigurationRepository(
      */
     private fun fromProtobuf(pb: HandAbstractionPb): HandAbstraction {
         return HandAbstraction(
-            preflopBuckets = pb.preflopBuckets,
-            flopBuckets = pb.flopBuckets,
-            turnBuckets = pb.turnBuckets,
-            riverBuckets = pb.riverBuckets
+            mode = try {
+                AbstractionMode.valueOf(pb.mode)
+            } catch (e: Exception) {
+                AbstractionMode.AUTO
+            },
+            numBuckets = if (pb.numBuckets > 0) pb.numBuckets else 200,
+            bucketingMethod = try {
+                BucketingMethod.valueOf(pb.bucketingMethod)
+            } catch (e: Exception) {
+                BucketingMethod.EQUITY_HISTOGRAM
+            }
         )
     }
 }
