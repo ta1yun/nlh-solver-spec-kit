@@ -235,20 +235,53 @@ class KKTConditionTest {
     }
 
     /**
+     * Helper to train CFR across ALL matchups together (range-based).
+     * This creates the uncertainty needed for MDF to emerge.
+     */
+    private fun trainSolverAcrossAllMatchups(
+        matchups: List<StartingHandSampler.WeightedMatchup>,
+        configuration: com.nlhsolver.solver.SolveConfiguration,
+        iterations: Int = 5000
+    ): StrategyProfile {
+        val solver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
+
+        // Create root states for all matchups
+        val rootStates = matchups.map { matchup ->
+            StartingHandSampler.createGameState(
+                street = configuration.startingStreet,
+                board = configuration.board,
+                btnHand = matchup.btnCards,
+                bbHand = matchup.bbCards,
+                btnStack = 50.0,
+                bbStack = 50.0,
+                pot = configuration.pot,
+                abstractionMode = AbstractionMode.NONE,
+                maxRaisesPerStreet = 0
+            )
+        }
+
+        // Train across all matchups together (like SolveOrchestrator does)
+        for (iter in 1..iterations) {
+            for (state in rootStates) {
+                solver.train(state, iterations = 1)
+            }
+        }
+
+        return solver.getStrategyProfile()
+    }
+
+    /**
      * (C) MDF frequency test: Defender should call at minimum defense frequency.
      *
      * For a 0.5x pot bet (10 into 20):
      * MDF = 20 / (20 + 10) = 66.67%
      * Defender should call at least 66.67% to prevent pure bluff exploitation.
      *
-     * NOTE: MDF is a range-level concept. In isolated matchups:
-     * - Bluff catchers facing value hands should fold 100%
-     * - Bluff catchers facing bluffs should call 100%
-     * True MDF emerges when aggregating across all possible opponent hands.
+     * This test trains all matchups TOGETHER so BB faces uncertainty about BTN's hand.
      */
     @Test
     fun `defender calls at MDF when facing bet`() {
-        println("\n=== MDF FREQUENCY TEST ===\n")
+        println("\n=== MDF FREQUENCY TEST (RANGE-BASED) ===\n")
 
         val configuration = RiverScenarios.toyPolarizedVsCondensed()
         val matchups = StartingHandSampler.generateMatchupsFromRanges(
@@ -263,94 +296,207 @@ class KKTConditionTest {
         // Expected MDF = pot / (pot + bet) = 20 / (20 + 10) = 66.67%
         val expectedMDF = 20.0 / (20.0 + 10.0)
         println("Expected MDF: ${String.format("%.1f%%", expectedMDF * 100)}")
-        println("(Defender must call ${String.format("%.1f%%", expectedMDF * 100)} to make bluffs break-even)\n")
+        println("(Defender must call ${String.format("%.1f%%", expectedMDF * 100)} to make bluffs break-even)")
+        println("\nTraining all ${matchups.size} matchups TOGETHER (range-based)...")
 
-        // Collect defense frequencies for BB's bluff catchers when facing BTN bet
-        val defenseFrequencies = mutableMapOf<String, MutableList<Double>>()
-        val debugInfo = mutableListOf<String>()
+        // Train all matchups together so BB faces uncertainty
+        val strategyProfile = trainSolverAcrossAllMatchups(matchups, configuration, iterations = 3000)
+
+        println("Training complete.\n")
+
+        // Collect defense frequencies for each BB hand
+        val defenseByHand = mutableMapOf<String, MutableList<Double>>()
+        val btnBetByHand = mutableMapOf<String, MutableList<Double>>()
 
         for (matchup in matchups) {
-            val btnHand = "${matchup.btnCards.first}${matchup.btnCards.second}"
-            val bbHand = "${matchup.bbCards.first}${matchup.bbCards.second}"
-
-            val (rootState, strategyProfile) = trainSolverForMatchup(matchup, configuration, iterations = 3000)
+            val rootState = StartingHandSampler.createGameState(
+                street = configuration.startingStreet,
+                board = configuration.board,
+                btnHand = matchup.btnCards,
+                bbHand = matchup.bbCards,
+                btnStack = 50.0,
+                bbStack = 50.0,
+                pot = configuration.pot,
+                abstractionMode = AbstractionMode.NONE,
+                maxRaisesPerStreet = 0
+            )
 
             val actionEVData = verifier.computeActionEVs(rootState, strategyProfile)
 
-            // Check BTN's betting frequency first
-            val btnBetData = actionEVData.values.find { data ->
-                data.player == 1 && data.infoSet.contains("history=BB:CHECK")
-            }
-            val btnBetFreq = btnBetData?.let {
-                val betIdx = it.actionLabels.indexOf("bet")
-                if (betIdx >= 0) it.strategy[betIdx] else 0.0
-            } ?: 0.0
-
-            // Find BB's info set when facing BTN bet after checking
-            val defenderResults = actionEVData.values
-                .filter { data ->
-                    data.player == 0 &&  // BB
-                    data.infoSet.contains("history=BB:CHECK|BTN:BET") &&  // After BB checks, BTN bets
-                    data.actionLabels.contains("fold") &&
-                    data.actionLabels.contains("call")
+            // Get BTN's bet frequency
+            val btnData = actionEVData.values.find { it.player == 1 && it.infoSet.contains("history=BB:CHECK") }
+            if (btnData != null) {
+                val betIdx = btnData.actionLabels.indexOf("bet")
+                if (betIdx >= 0) {
+                    val handMatch = Regex("hand=([^:]+)").find(btnData.infoSet)
+                    val hand = handMatch?.groupValues?.get(1) ?: "unknown"
+                    btnBetByHand.getOrPut(hand) { mutableListOf() }.add(btnData.strategy[betIdx])
                 }
+            }
 
-            for (data in defenderResults) {
-                val foldIndex = data.actionLabels.indexOf("fold")
-                val foldFreq = data.strategy[foldIndex]
-                val defenseFreq = 1.0 - foldFreq
-
-                val handMatch = Regex("hand=([^:]+)").find(data.infoSet)
-                val hand = handMatch?.groupValues?.get(1) ?: "unknown"
-
-                defenseFrequencies.getOrPut(hand) { mutableListOf() }.add(defenseFreq)
-                debugInfo.add("  BTN=$btnHand (bet ${String.format("%.0f%%", btnBetFreq*100)}) vs BB=$hand -> defense ${String.format("%.0f%%", defenseFreq*100)}")
+            // Get BB's defense frequency when facing bet
+            val bbData = actionEVData.values.find {
+                it.player == 0 && it.infoSet.contains("history=BB:CHECK|BTN:BET")
+            }
+            if (bbData != null) {
+                val foldIdx = bbData.actionLabels.indexOf("fold")
+                if (foldIdx >= 0) {
+                    val handMatch = Regex("hand=([^:]+)").find(bbData.infoSet)
+                    val hand = handMatch?.groupValues?.get(1) ?: "unknown"
+                    val defenseFreq = 1.0 - bbData.strategy[foldIdx]
+                    defenseByHand.getOrPut(hand) { mutableListOf() }.add(defenseFreq)
+                }
             }
         }
 
-        println("\nMatchup details:")
-        debugInfo.forEach { println(it) }
+        // Print BTN betting frequencies
+        println("=== BTN BETTING FREQUENCIES ===")
+        for ((hand, freqs) in btnBetByHand.entries.sortedByDescending { it.value.average() }) {
+            val avgBet = freqs.average()
+            val handType = when {
+                hand.contains("Ad") && hand.contains("Ac") -> "VALUE"  // AA
+                hand.contains("Kh") && hand.contains("Kd") -> "VALUE"  // KK
+                else -> "BLUFF"
+            }
+            println("  $hand ($handType): bet ${String.format("%.1f%%", avgBet * 100)}")
+        }
 
-        // Separate by opponent type
-        val vsValue = debugInfo.filter { it.contains("AcAd") || it.contains("KhKd") }
-        val vsBluff = debugInfo.filter { it.contains("6c5h") || it.contains("5c3s") }
+        // Print BB defense frequencies
+        println("\n=== BB DEFENSE FREQUENCIES ===")
+        for ((hand, freqs) in defenseByHand.entries.sortedByDescending { it.value.average() }) {
+            val avgDefense = freqs.average()
+            val status = when {
+                kotlin.math.abs(avgDefense - expectedMDF) < 0.10 -> "✓"
+                kotlin.math.abs(avgDefense - expectedMDF) < 0.20 -> "≈"
+                else -> "✗"
+            }
+            println("  $status $hand: defense ${String.format("%.1f%%", avgDefense * 100)} (MDF=${String.format("%.1f%%", expectedMDF * 100)})")
+        }
 
-        println("\n=== ISOLATED MATCHUP ANALYSIS ===")
-        println("Against VALUE (AA, KK): BB should fold 100% (always loses)")
-        println("Against BLUFFS (65o, 53o): BB should call 100% (always wins)")
+        // Compute overall defense
+        val allDefenseFreqs = defenseByHand.values.flatten()
+        val overallDefense = if (allDefenseFreqs.isNotEmpty()) allDefenseFreqs.average() else 0.0
 
-        // Count correct behaviors
-        val correctVsValue = vsValue.count { it.contains("defense 0%") }
-        val correctVsBluff = vsBluff.count { it.contains("defense 100%") }
+        println("\n=== SUMMARY ===")
+        println("Overall BB defense: ${String.format("%.1f%%", overallDefense * 100)}")
+        println("Expected MDF: ${String.format("%.1f%%", expectedMDF * 100)}")
+        println("Difference: ${String.format("%.1f%%", kotlin.math.abs(overallDefense - expectedMDF) * 100)}")
 
-        println("\nResults:")
-        println("  vs Value: $correctVsValue / ${vsValue.size} fold correctly")
-        println("  vs Bluff: $correctVsBluff / ${vsBluff.size} call correctly")
-
-        // The "50%" is expected: (6 × 0% + 6 × 100%) / 12 = 50%
-        val allFreqs = defenseFrequencies.values.flatten()
-        val overallDefense = if (allFreqs.isNotEmpty()) allFreqs.average() else 0.0
-
-        println("\nOverall defense: ${String.format("%.1f%%", overallDefense * 100)}")
-        println("  (This is the average of pure strategies, NOT MDF)")
-        println("  Expected: 50% = (6 × 0% + 6 × 100%) / 12")
-
-        println("\n=== WHY MDF DOESN'T APPLY ===")
-        println("MDF (${String.format("%.1f%%", expectedMDF * 100)}) is a RANGE-LEVEL concept.")
-        println("In isolated matchups, BB knows exactly what BTN has.")
-        println("True MDF emerges when BTN's range is unknown to BB.")
-
-        // Assert correct pure strategies
+        // MDF should be close to 66.7% when training together
+        // Allow 10% tolerance (56.7% - 76.7%)
+        val mdfTolerance = 0.10
         assertTrue(
-            correctVsValue >= vsValue.size - 1,  // Allow 1 error for noise
-            "BB should fold against value hands"
-        )
-        assertTrue(
-            correctVsBluff >= vsBluff.size - 1,  // Allow 1 error for noise
-            "BB should call against bluff hands"
+            kotlin.math.abs(overallDefense - expectedMDF) <= mdfTolerance,
+            "Defense should be within ${mdfTolerance * 100}% of MDF. Expected ~${String.format("%.1f%%", expectedMDF * 100)}, got ${String.format("%.1f%%", overallDefense * 100)}"
         )
 
-        println("\n✅ MDF test completed - isolated matchup behavior is CORRECT")
+        println("\n✅ MDF test completed")
+    }
+
+    /**
+     * Comparison test: Shows that isolated matchups produce 50% defense (pure strategies),
+     * while range-based training produces MDF (~66.7%).
+     */
+    @Test
+    fun `isolated vs range-based training comparison`() {
+        println("\n=== ISOLATED vs RANGE-BASED COMPARISON ===\n")
+
+        val configuration = RiverScenarios.toyPolarizedVsCondensed()
+        val matchups = StartingHandSampler.generateMatchupsFromRanges(
+            street = configuration.startingStreet,
+            board = configuration.board,
+            btnRange = configuration.btnRange,
+            bbRange = configuration.bbRange
+        )
+
+        val verifier = KKTVerifier()
+        val expectedMDF = 20.0 / (20.0 + 10.0)
+
+        // === ISOLATED MATCHUPS ===
+        println("1. ISOLATED MATCHUPS (each trained separately):")
+        val isolatedDefense = mutableListOf<Double>()
+
+        for (matchup in matchups) {
+            val (rootState, strategyProfile) = trainSolverForMatchup(matchup, configuration, iterations = 2000)
+            val actionEVData = verifier.computeActionEVs(rootState, strategyProfile)
+
+            val bbData = actionEVData.values.find {
+                it.player == 0 && it.infoSet.contains("history=BB:CHECK|BTN:BET")
+            }
+            if (bbData != null) {
+                val foldIdx = bbData.actionLabels.indexOf("fold")
+                if (foldIdx >= 0) {
+                    isolatedDefense.add(1.0 - bbData.strategy[foldIdx])
+                }
+            }
+        }
+
+        val isolatedAvg = isolatedDefense.average()
+        println("   Average defense: ${String.format("%.1f%%", isolatedAvg * 100)}")
+        println("   (Pure strategies: 0% vs value, 100% vs bluffs → avg 50%)")
+
+        // === RANGE-BASED ===
+        println("\n2. RANGE-BASED (all matchups trained together):")
+        val rangeStrategy = trainSolverAcrossAllMatchups(matchups, configuration, iterations = 2000)
+        val rangeDefense = mutableListOf<Double>()
+
+        for (matchup in matchups) {
+            val rootState = StartingHandSampler.createGameState(
+                street = configuration.startingStreet,
+                board = configuration.board,
+                btnHand = matchup.btnCards,
+                bbHand = matchup.bbCards,
+                btnStack = 50.0,
+                bbStack = 50.0,
+                pot = configuration.pot,
+                abstractionMode = AbstractionMode.NONE,
+                maxRaisesPerStreet = 0
+            )
+            val actionEVData = verifier.computeActionEVs(rootState, rangeStrategy)
+
+            val bbData = actionEVData.values.find {
+                it.player == 0 && it.infoSet.contains("history=BB:CHECK|BTN:BET")
+            }
+            if (bbData != null) {
+                val foldIdx = bbData.actionLabels.indexOf("fold")
+                if (foldIdx >= 0) {
+                    rangeDefense.add(1.0 - bbData.strategy[foldIdx])
+                }
+            }
+        }
+
+        val rangeAvg = rangeDefense.average()
+        println("   Average defense: ${String.format("%.1f%%", rangeAvg * 100)}")
+        println("   (MDF emerges from uncertainty about opponent's hand)")
+
+        // === COMPARISON ===
+        println("\n=== RESULTS ===")
+        println("Expected MDF: ${String.format("%.1f%%", expectedMDF * 100)}")
+        println("Isolated:     ${String.format("%.1f%%", isolatedAvg * 100)} (diff: ${String.format("%.1f%%", kotlin.math.abs(isolatedAvg - expectedMDF) * 100)})")
+        println("Range-based:  ${String.format("%.1f%%", rangeAvg * 100)} (diff: ${String.format("%.1f%%", kotlin.math.abs(rangeAvg - expectedMDF) * 100)})")
+
+        // Assertions
+        // Isolated should be around 50% (far from MDF)
+        assertTrue(
+            kotlin.math.abs(isolatedAvg - 0.50) < 0.15,
+            "Isolated training should produce ~50% defense (got ${String.format("%.1f%%", isolatedAvg * 100)})"
+        )
+
+        // Range-based should be close to MDF (66.7%)
+        assertTrue(
+            kotlin.math.abs(rangeAvg - expectedMDF) < 0.15,
+            "Range-based training should produce ~MDF defense (got ${String.format("%.1f%%", rangeAvg * 100)})"
+        )
+
+        // Range-based should be significantly closer to MDF than isolated
+        val isolatedError = kotlin.math.abs(isolatedAvg - expectedMDF)
+        val rangeError = kotlin.math.abs(rangeAvg - expectedMDF)
+        assertTrue(
+            rangeError < isolatedError,
+            "Range-based (${String.format("%.1f%%", rangeError * 100)} error) should be closer to MDF than isolated (${String.format("%.1f%%", isolatedError * 100)} error)"
+        )
+
+        println("\n✅ Range-based training produces MDF, isolated does not")
     }
 
     /**
