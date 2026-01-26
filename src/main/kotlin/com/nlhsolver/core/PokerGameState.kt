@@ -425,14 +425,28 @@ data class PokerGameState(
 
         // Convert GameAction to poker Action
         // For MVP, use simplified actions with default amounts
+        // Important: Cap bet/raise amounts at available stack to prevent negative balances
         val pokerAction = when (action.getActionId().lowercase()) {
             "fold" -> Action.Fold
             "check" -> Action.Check
             "call" -> Action.Call
-            "bet" -> Action.Bet(pot * 0.5) // Default to 0.5x pot bet
+            "bet" -> {
+                val desiredBet = pot * 0.5  // Default to 0.5x pot bet
+                val cappedBet = minOf(desiredBet, playerState.stackBb)  // Can't bet more than stack
+                Action.Bet(cappedBet)
+            }
             "raise" -> {
                 val highestBet = playerStates.values.maxOf { it.investedThisRound }
-                Action.Raise(highestBet + pot * 0.5) // Default to 0.5x pot raise
+                val amountToCall = highestBet - playerState.investedThisRound
+                val desiredRaiseTotal = highestBet + pot * 0.5  // Default to 0.5x pot raise
+                val maxRaiseTotal = playerState.investedThisRound + playerState.stackBb  // Can't exceed total stack
+                val cappedRaiseTotal = minOf(desiredRaiseTotal, maxRaiseTotal)
+                // If capped raise equals just the call amount, convert to all-in
+                if (cappedRaiseTotal <= highestBet + 0.01) {
+                    Action.AllIn(playerState.stackBb)
+                } else {
+                    Action.Raise(cappedRaiseTotal)
+                }
             }
             else -> throw IllegalArgumentException("Unknown action: ${action.getActionId()}")
         }

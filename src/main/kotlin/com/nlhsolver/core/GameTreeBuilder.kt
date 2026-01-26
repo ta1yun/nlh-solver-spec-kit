@@ -6,6 +6,16 @@ import com.nlhsolver.solver.SolveConfiguration
 import java.util.UUID
 
 /**
+ * Option for board canonicalization in game tree building.
+ */
+enum class BoardCanonicalization {
+    /** No canonicalization - use boards as-is */
+    NONE,
+    /** Canonicalize boards using suit isomorphism */
+    ENABLED
+}
+
+/**
  * Constructs poker game trees from solve configurations (T036, T037, T038).
  *
  * The GameTreeBuilder takes a SolveConfiguration and builds an extensive-form game tree
@@ -21,9 +31,19 @@ import java.util.UUID
  */
 class GameTreeBuilder(
     private val config: SolveConfiguration,
-    private val postflopBucketing: PostflopBucketing = PostflopBucketing.create(config.handAbstraction.numBuckets)
+    private val postflopBucketing: PostflopBucketing = PostflopBucketing.create(config.handAbstraction.numBuckets),
+    private val boardCanonicalization: BoardCanonicalization = BoardCanonicalization.NONE
 ) {
     private val positions = config.stackSizes.keys.sortedBy { it.ordinal }
+
+    /**
+     * Board canonicalizer for this game tree.
+     * Used to reduce equivalent boards to canonical form (T233).
+     */
+    val boardCanonicalizer: BoardCanonicalizer = when (boardCanonicalization) {
+        BoardCanonicalization.NONE -> BoardCanonicalizer.identity()
+        BoardCanonicalization.ENABLED -> config.getBoardCanonicalizer()
+    }
 
     init {
         require(config.numPlayers == 2) {
@@ -98,6 +118,7 @@ class GameTreeBuilder(
      * Builds a chance node (dealing community cards).
      *
      * Phase 2.6: Uses a fixed flop board (K♠7♥2♦) for verification.
+     * Phase 2.7: When canonicalization is enabled, uses canonical boards (T233).
      * Full implementation would enumerate boards with suit isomorphism.
      */
     private fun buildChanceNode(state: PokerGameState, depth: Int): GameTreeNode {
@@ -117,14 +138,26 @@ class GameTreeBuilder(
             Card(com.nlhsolver.poker.Rank.TWO, com.nlhsolver.poker.Suit.DIAMONDS)
         )
 
+        // Determine board based on next street
+        val rawBoard = when (nextStreet) {
+            Street.FLOP -> fixedFlopBoard
+            Street.TURN -> state.board + Card(com.nlhsolver.poker.Rank.JACK, com.nlhsolver.poker.Suit.CLUBS)
+            Street.RIVER -> state.board + Card(com.nlhsolver.poker.Rank.TEN, com.nlhsolver.poker.Suit.SPADES)
+            else -> state.board
+        }
+
+        // Apply canonicalization if enabled (T233: isomorphism reduction)
+        val canonicalBoard = when (boardCanonicalization) {
+            BoardCanonicalization.NONE -> rawBoard
+            BoardCanonicalization.ENABLED -> {
+                val newCanonicalizer = BoardCanonicalizer.canonicalize(rawBoard)
+                newCanonicalizer.canonicalBoard
+            }
+        }
+
         val nextState = state.copy(
             street = nextStreet,
-            board = when (nextStreet) {
-                Street.FLOP -> fixedFlopBoard
-                Street.TURN -> state.board + Card(com.nlhsolver.poker.Rank.JACK, com.nlhsolver.poker.Suit.CLUBS)
-                Street.RIVER -> state.board + Card(com.nlhsolver.poker.Rank.TEN, com.nlhsolver.poker.Suit.SPADES)
-                else -> state.board
-            },
+            board = canonicalBoard,
             playerStates = resetPlayerStates,
             actionHistory = emptyList() // Reset action history for new street
         )

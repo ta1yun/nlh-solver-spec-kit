@@ -238,11 +238,11 @@ Phase 7: Polish & Cross-Cutting Concerns
 **Tasks**: 11
 
 ### Board Isomorphism
-- [ ] T230 [P2.7] Implement suit canonicalization for boards in src/main/kotlin/com/nlhsolver/poker/BoardCanonicalizer.kt
-- [ ] T231 [P2.7] Create canonical board → original board mapping for result translation in BoardCanonicalizer
-- [ ] T232 [P2.7] Implement hand suit remapping to match canonical board in src/main/kotlin/com/nlhsolver/poker/HandCanonicalizer.kt
-- [ ] T233 [P2.7] Add isomorphism reduction to GameTreeBuilder (deduplicate equivalent boards) in GameTreeBuilder
-- [ ] T234 [P2.7] Verify isomorphism correctness: solve same board with different suit permutations, compare strategies
+- [x] T230 [P2.7] Implement suit canonicalization for boards in src/main/kotlin/com/nlhsolver/poker/BoardCanonicalizer.kt
+- [x] T231 [P2.7] Create canonical board → original board mapping for result translation in BoardCanonicalizer
+- [x] T232 [P2.7] Implement hand suit remapping to match canonical board in src/main/kotlin/com/nlhsolver/poker/BoardCanonicalizer.kt
+- [x] T233 [P2.7] Add isomorphism reduction to GameTreeBuilder (deduplicate equivalent boards) in GameTreeBuilder
+- [x] T234 [P2.7] Verify isomorphism correctness: solve same board with different suit permutations, compare strategies
 
 ### Turn/River Board Clustering
 - [ ] T235 [P2.7] Implement turn card clustering (group by texture change: flush draw completes, pair, blank) in src/main/kotlin/com/nlhsolver/poker/TurnClustering.kt

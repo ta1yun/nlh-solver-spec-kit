@@ -1,5 +1,6 @@
 package com.nlhsolver.solver
 
+import com.nlhsolver.poker.BoardCanonicalizer
 import com.nlhsolver.poker.Card
 import com.nlhsolver.poker.Position
 import com.nlhsolver.poker.Street
@@ -125,6 +126,32 @@ data class SolveConfiguration(
 
         // Board cards must be unique
         require(board.distinct().size == board.size) { "Board cards must be unique" }
+    }
+
+    /**
+     * Get a canonicalizer for this configuration's board.
+     * Returns identity canonicalizer for preflop (no board).
+     */
+    fun getBoardCanonicalizer(): BoardCanonicalizer {
+        return if (board.isEmpty()) {
+            BoardCanonicalizer.identity()
+        } else {
+            BoardCanonicalizer.canonicalize(board)
+        }
+    }
+
+    /**
+     * Create a new configuration with the board canonicalized.
+     * This is useful for solving - use canonical board, then translate results back.
+     */
+    fun withCanonicalBoard(): Pair<SolveConfiguration, BoardCanonicalizer> {
+        if (board.isEmpty()) {
+            return Pair(this, BoardCanonicalizer.identity())
+        }
+
+        val canonicalizer = BoardCanonicalizer.canonicalize(board)
+        val canonicalConfig = this.copy(board = canonicalizer.canonicalBoard)
+        return Pair(canonicalConfig, canonicalizer)
     }
 
     companion object {
