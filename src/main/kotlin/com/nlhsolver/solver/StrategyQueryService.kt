@@ -165,7 +165,8 @@ class StrategyQueryService(
         handNotation: String,
         position: Position = Position.BTN,
         street: Street = Street.PREFLOP,
-        board: List<Card> = emptyList()
+        board: List<Card> = emptyList(),
+        facing: String = ""
     ): CanonicalHandQueryResult {
         // Parse hand notation
         val hand = try {
@@ -201,7 +202,8 @@ class StrategyQueryService(
                 infoSet.infoSet.contains("p$playerIndex:") &&
                 exactHandKeys.any { handKey -> infoSet.infoSet.contains("hand=$handKey:") } &&
                 infoSet.infoSet.contains("street=$street") &&
-                (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
+                (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr")) &&
+                (facing.isEmpty() || matchesActionHistory(infoSet.infoSet, facing))
             }
             .toList()
 
@@ -220,7 +222,8 @@ class StrategyQueryService(
                     infoSet.infoSet.contains("p$playerIndex:") &&
                     infoSet.infoSet.contains("bucket=$bucketId:") &&
                     infoSet.infoSet.contains("street=$street") &&
-                    (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr"))
+                    (street == Street.PREFLOP || infoSet.infoSet.contains("board=$boardStr")) &&
+                    (facing.isEmpty() || matchesActionHistory(infoSet.infoSet, facing))
                 }
                 .toList()
         } else {
@@ -295,10 +298,11 @@ class StrategyQueryService(
         strategyId: UUID,
         position: Position = Position.BTN,
         street: com.nlhsolver.poker.Street = com.nlhsolver.poker.Street.PREFLOP,
-        board: List<com.nlhsolver.poker.Card> = emptyList()
+        board: List<com.nlhsolver.poker.Card> = emptyList(),
+        facing: String = ""
     ): Map<String, CanonicalHandQueryResult> {
         return PreflopBuckets.allHands.associate { hand ->
-            hand.notation to queryByCanonicalHand(strategyId, hand.notation, position, street, board)
+            hand.notation to queryByCanonicalHand(strategyId, hand.notation, position, street, board, facing)
         }
     }
 
@@ -506,6 +510,76 @@ class StrategyQueryService(
         }
 
         return result
+    }
+
+    /**
+     * Check if an info set's action history matches the facing parameter.
+     *
+     * facing parameter format:
+     * - "check" - matches info sets where opponent checked
+     * - "bet" - matches info sets facing any bet
+     * - "bet:10" - matches info sets facing a specific bet size
+     * - "raise" - matches info sets facing any raise
+     *
+     * @param infoSetStr The info set string (e.g., "p0:hand=QsQh:street=RIVER:board=...:history=[BTN:bet]")
+     * @param facing The action to filter by
+     * @return true if the info set matches the facing condition
+     */
+    private fun matchesActionHistory(infoSetStr: String, facing: String): Boolean {
+        // Extract action history from info set string
+        // Format: history=position:action|position:action|...
+        // Extract everything after "history=" (it's the last field in the info set string)
+        val historyStr = if (infoSetStr.contains("history=")) {
+            infoSetStr.substringAfter("history=")
+        } else {
+            return facing.isEmpty()
+        }
+
+        if (historyStr.isEmpty()) {
+            // No action history - matches if facing is empty or "check" (implicit)
+            return facing.isEmpty() || facing.lowercase() == "check"
+        }
+
+        // Parse the last action in the history (the one we're facing)
+        // Actions are separated by "|" not comma
+        val actions = historyStr.split("|").map { it.trim() }
+        val lastAction = actions.lastOrNull() ?: return facing.isEmpty()
+
+        // Parse last action: "position:action" or "position:action:amount"
+        val lastActionParts = lastAction.split(":")
+        if (lastActionParts.size < 2) return false
+
+        val actionType = lastActionParts[1].lowercase()
+
+        // Parse facing parameter
+        val facingParts = facing.split(":")
+        val facingAction = facingParts[0].lowercase()
+        val facingAmount = facingParts.getOrNull(1)?.toDoubleOrNull()
+
+        // Match action type
+        when (facingAction) {
+            "check" -> return actionType == "check"
+            "bet" -> {
+                if (actionType != "bet") return false
+                // If specific amount is requested, check it matches
+                if (facingAmount != null && lastActionParts.size >= 3) {
+                    val actualAmount = lastActionParts[2].toDoubleOrNull() ?: return false
+                    return kotlin.math.abs(actualAmount - facingAmount) < 0.01
+                }
+                return true
+            }
+            "raise" -> {
+                if (actionType != "raise") return false
+                if (facingAmount != null && lastActionParts.size >= 3) {
+                    val actualAmount = lastActionParts[2].toDoubleOrNull() ?: return false
+                    return kotlin.math.abs(actualAmount - facingAmount) < 0.01
+                }
+                return true
+            }
+            "call" -> return actionType == "call"
+            "fold" -> return actionType == "fold"
+            else -> return false
+        }
     }
 }
 

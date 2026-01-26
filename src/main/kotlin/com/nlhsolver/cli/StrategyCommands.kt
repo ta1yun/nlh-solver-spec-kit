@@ -238,6 +238,7 @@ class StrategyHandCommand : CliktCommand(
     private val position by option("--position", "-p", help = "Position (BTN or BB)").default("BTN")
     private val street by option("--street", "-s", help = "Street (PREFLOP, FLOP)").default("PREFLOP")
     private val board by option("--board", "-b", help = "Board cards (e.g., 'Ks7h2d')").default("")
+    private val facing by option("--facing", "-f", help = "Filter by action faced (e.g., 'check', 'bet', 'bet:10')").default("")
     private val json by option("--json", help = "Output in JSON format").flag()
 
     override fun run() {
@@ -262,7 +263,7 @@ class StrategyHandCommand : CliktCommand(
                 return
             }
 
-            val result = queryService.queryByCanonicalHand(id, hand, positionEnum, streetEnum, boardCards)
+            val result = queryService.queryByCanonicalHand(id, hand, positionEnum, streetEnum, boardCards, facing)
 
             val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
             echo(OutputFormatter.formatCanonicalHandQuery(result, format))
@@ -339,6 +340,7 @@ class StrategyRangeCommand : CliktCommand(
     private val position by option("--position", "-p", help = "Position (BTN or BB)").default("BTN")
     private val street by option("--street", "-s", help = "Street (PREFLOP, FLOP)").default("PREFLOP")
     private val board by option("--board", "-b", help = "Board cards (e.g., 'Ks7h2d')").default("")
+    private val facing by option("--facing", "-f", help = "Filter by action faced (e.g., 'check', 'bet', 'bet:10')").default("")
     private val json by option("--json", help = "Output in JSON format").flag()
 
     override fun run() {
@@ -364,8 +366,9 @@ class StrategyRangeCommand : CliktCommand(
             }
 
             val streetLabel = if (streetEnum == Street.PREFLOP) "preflop" else "flop (${formatBoard(boardCards)})"
-            echo("Loading $streetLabel range for $positionEnum...")
-            val rangeResults = queryService.queryFullRange(id, positionEnum, streetEnum, boardCards)
+            val facingLabel = if (facing.isNotEmpty()) " facing $facing" else ""
+            echo("Loading $streetLabel range for $positionEnum$facingLabel...")
+            val rangeResults = queryService.queryFullRange(id, positionEnum, streetEnum, boardCards, facing)
 
             val format = if (json) OutputFormatter.Format.JSON else OutputFormatter.Format.TEXT
             echo(OutputFormatter.formatPreflopRange(rangeResults, positionEnum, format))
