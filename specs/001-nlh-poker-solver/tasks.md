@@ -245,14 +245,14 @@ Phase 7: Polish & Cross-Cutting Concerns
 - [x] T234 [P2.7] Verify isomorphism correctness: solve same board with different suit permutations, compare strategies
 
 ### Turn/River Board Clustering
-- [ ] T235 [P2.7] Implement turn card clustering (group by texture change: flush draw completes, pair, blank) in src/main/kotlin/com/nlhsolver/poker/TurnClustering.kt
-- [ ] T236 [P2.7] Implement river card clustering (group by final hand strength distribution) in src/main/kotlin/com/nlhsolver/poker/RiverClustering.kt
-- [ ] T237 [P2.7] Add configurable cluster count for turn/river (default: 10-15 clusters per street)
+- [x] T235 [P2.7] Implement turn card clustering (group by texture change: flush draw completes, pair, blank) in src/main/kotlin/com/nlhsolver/poker/TurnClustering.kt
+- [x] T236 [P2.7] Implement river card clustering (group by final hand strength distribution) in src/main/kotlin/com/nlhsolver/poker/RiverClustering.kt
+- [x] T237 [P2.7] Add configurable cluster count for turn/river (default: 10-15 clusters per street)
 
 ### Range-Based Bucketing Enhancement
-- [ ] T238 [P2.7] Add equity histogram calculation to PostflopBucketing (equity distribution vs opponent range) in PostflopBucketing.kt
-- [ ] T239 [P2.7] Implement street-specific bucket counts in PostflopBucketing (50 flop, 30 turn, 20 river) replacing fixed 200
-- [ ] T240 [P2.7] Add draw potential features for flop bucketing (flush draws, straight draws, pair draws) in PostflopBucketing.kt
+- [x] T238 [P2.7] Add equity histogram calculation to PostflopBucketing (equity distribution vs opponent range) in PostflopBucketing.kt
+- [x] T239 [P2.7] Implement street-specific bucket counts in PostflopBucketing (50 flop, 30 turn, 20 river) replacing fixed 200
+- [x] T240 [P2.7] Add draw potential features for flop bucketing (flush draws, straight draws, pair draws) in PostflopBucketing.kt
 
 ### Integration & Verification
 - [ ] T241 [P2.7] Integrate board isomorphism + range bucketing into SolveOrchestrator for full game tree
