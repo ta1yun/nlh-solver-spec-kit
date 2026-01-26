@@ -56,15 +56,23 @@ class SolveOrchestrator(
             exploitabilityCalculator = exploitabilityCalculator
         )
 
+        // Phase 2.7 (T241): Board canonicalization for suit isomorphism
+        // Use canonical board to reduce equivalent boards to a single representation
+        val (effectiveConfig, boardCanonicalizer) = if (configuration.board.isNotEmpty()) {
+            configuration.withCanonicalBoard()
+        } else {
+            Pair(configuration, com.nlhsolver.poker.BoardCanonicalizer.identity())
+        }
+
         // Unified Range-Based Solving: Generate weighted matchups from ranges
         // Works for all streets (PREFLOP, FLOP, TURN, RIVER)
         // For quick testing, limit matchups via NLH_MAX_MATCHUPS environment variable
         val maxMatchups = System.getenv("NLH_MAX_MATCHUPS")?.toIntOrNull()
         val allMatchupsRaw = com.nlhsolver.core.StartingHandSampler.generateMatchupsFromRanges(
-            street = configuration.startingStreet,
-            board = configuration.board,
-            btnRange = configuration.btnRange,
-            bbRange = configuration.bbRange
+            street = effectiveConfig.startingStreet,
+            board = effectiveConfig.board,
+            btnRange = effectiveConfig.btnRange,
+            bbRange = effectiveConfig.bbRange
         )
         val allMatchups = if (maxMatchups != null && maxMatchups > 0) {
             println("  [TEST MODE] Limiting to $maxMatchups matchups")
@@ -109,7 +117,10 @@ class SolveOrchestrator(
         }
 
         println("Unified range-based solving: ${configuration.startingStreet.name}")
-        println("  Board: ${if (configuration.board.isEmpty()) "(empty)" else configuration.board.joinToString("")}")
+        println("  Original board: ${if (configuration.board.isEmpty()) "(empty)" else configuration.board.joinToString("")}")
+        if (effectiveConfig.board != configuration.board && configuration.board.isNotEmpty()) {
+            println("  Canonical board: ${effectiveConfig.board.joinToString("")} (suit isomorphism)")
+        }
         println("  Total matchups: ${allMatchups.size}")
         println("  Total weight: ${"%.2f".format(totalWeight)}")
         println("  Pot: ${configuration.pot}")

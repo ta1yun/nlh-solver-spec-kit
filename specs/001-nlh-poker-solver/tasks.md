@@ -255,8 +255,8 @@ Phase 7: Polish & Cross-Cutting Concerns
 - [x] T240 [P2.7] Add draw potential features for flop bucketing (flush draws, straight draws, pair draws) in PostflopBucketing.kt
 
 ### Integration & Verification
-- [ ] T241 [P2.7] Integrate board isomorphism + range bucketing into SolveOrchestrator for full game tree
-- [ ] T242 [P2.7] Benchmark abstraction quality: compare solve results with/without abstraction on test scenarios
+- [x] T241 [P2.7] Integrate board isomorphism + range bucketing into SolveOrchestrator for full game tree
+- [x] T242 [P2.7] Benchmark abstraction quality: compare solve results with/without abstraction on test scenarios
 
 **Completion Criteria**:
 - Board isomorphism reduces flop count from 22,100 → ~1,755 canonical boards
