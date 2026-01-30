@@ -1,6 +1,7 @@
 package com.nlhsolver.solver
 
 import com.nlhsolver.poker.BoardCanonicalizer
+import com.nlhsolver.poker.BoardClustering
 import com.nlhsolver.poker.Card
 import com.nlhsolver.poker.Position
 import com.nlhsolver.poker.Street
@@ -27,6 +28,7 @@ import java.util.UUID
  * @property convergenceCriteria Criteria for when the solve should terminate
  * @property betSizingScheme Discretized bet sizing options
  * @property handAbstraction Hand bucketing strategy
+ * @property boardClustering Board clustering strategy for blueprint solving (T128)
  * @property createdAt Timestamp when this configuration was created
  * @property updatedAt Timestamp when this configuration was last modified
  * @property startingStreet Starting street (PREFLOP, FLOP, TURN, RIVER). Default: PREFLOP
@@ -47,6 +49,7 @@ data class SolveConfiguration(
     val convergenceCriteria: ConvergenceCriteria = ConvergenceCriteria(),
     val betSizingScheme: BetSizingScheme = BetSizingScheme(),
     val handAbstraction: HandAbstraction = HandAbstraction(),
+    val boardClustering: BoardClustering = BoardClustering.none(),
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now(),
 
@@ -164,6 +167,7 @@ data class SolveConfiguration(
          * @param convergenceCriteria Convergence criteria for the solve
          * @param betSizingScheme Bet sizing scheme to use
          * @param handAbstraction Hand abstraction strategy
+         * @param boardClustering Board clustering strategy
          * @param name Optional name for this configuration
          * @return SolveConfiguration for preflop solving
          */
@@ -172,6 +176,7 @@ data class SolveConfiguration(
             convergenceCriteria: ConvergenceCriteria = ConvergenceCriteria(),
             betSizingScheme: BetSizingScheme = BetSizingScheme(),
             handAbstraction: HandAbstraction = HandAbstraction(),
+            boardClustering: BoardClustering = BoardClustering.none(),
             name: String = "Preflop Solve"
         ): SolveConfiguration = SolveConfiguration(
             numPlayers = 2,
@@ -180,6 +185,41 @@ data class SolveConfiguration(
             convergenceCriteria = convergenceCriteria,
             betSizingScheme = betSizingScheme,
             handAbstraction = handAbstraction,
+            boardClustering = boardClustering,
+            name = name,
+            // All other fields use defaults (PREFLOP, empty board, 169 hands, pot=1.5)
+        )
+
+        /**
+         * Create a blueprint configuration (T128) for fast preflop solving.
+         *
+         * Uses coarse hand abstraction and aggressive board clustering for speed.
+         * Expected solve time: 1-2 hours for full game tree.
+         * Expected EV loss: <2% pot.
+         *
+         * @param stackSizes Stack sizes for BTN and BB
+         * @param preflopBuckets Number of preflop buckets (8, 12, or 15)
+         * @param convergenceCriteria Convergence criteria (default: looser for blueprint)
+         * @param betSizingScheme Bet sizing scheme to use
+         * @param name Optional name for this configuration
+         * @return SolveConfiguration for blueprint solving
+         */
+        fun blueprint(
+            stackSizes: Map<Position, Double>,
+            preflopBuckets: Int = 8,
+            convergenceCriteria: ConvergenceCriteria = ConvergenceCriteria(
+                targetExploitability = 1.0  // 1% exploitability (looser than refinement)
+            ),
+            betSizingScheme: BetSizingScheme = BetSizingScheme(),
+            name: String = "Blueprint Solve"
+        ): SolveConfiguration = SolveConfiguration(
+            numPlayers = 2,
+            stackSizes = stackSizes,
+            startingPosition = Position.BTN,
+            convergenceCriteria = convergenceCriteria,
+            betSizingScheme = betSizingScheme,
+            handAbstraction = HandAbstraction.blueprint(preflopBuckets),
+            boardClustering = BoardClustering.blueprint(),
             name = name,
             // All other fields use defaults (PREFLOP, empty board, 169 hands, pot=1.5)
         )
