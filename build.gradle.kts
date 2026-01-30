@@ -88,9 +88,30 @@ kotlin {
     jvmToolchain(21)
 }
 
-// Application configuration
+// Application configuration (T122)
 application {
     mainClass.set("com.nlhsolver.cli.NlhSolverCliKt")
+    applicationName = "nlhsolver"
+
+    // Configure distribution
+    applicationDefaultJvmArgs = listOf(
+        "-Xmx8g",  // Set max heap to 8GB (suitable for most solves)
+        "-Xms2g",  // Set initial heap to 2GB
+        "-XX:+UseG1GC",  // Use G1 garbage collector for better latency
+        "-XX:MaxGCPauseMillis=200"  // Target GC pause time
+    )
+}
+
+// Custom run task with better default args
+tasks.named<JavaExec>("run") {
+    // Set higher memory limit for development
+    jvmArgs = listOf("-Xmx8g", "-Xms2g")
+
+    // Enable assertions in development
+    jvmArgs = jvmArgs!! + "-ea"
+
+    // Show better error messages
+    systemProperty("kotlin.assert.throws", "true")
 }
 
 // Task to verify Phase 2 implementation
