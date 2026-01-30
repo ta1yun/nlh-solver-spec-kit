@@ -300,59 +300,59 @@ Phase 7: Polish & Cross-Cutting Concerns
 
 ### CFR+ Algorithm (US1)
 
-- [ ] T040 [US1] Implement vanilla CFR in src/main/kotlin/com/nlhsolver/core/CFRSolver.kt (regret accumulation, strategy computation)
-- [ ] T041 [US1] Add CFR+ optimizations: linear discounting for regrets in CFRSolver
-- [ ] T042 [US1] Add Regret Matching+ (regret floor at 0, weighted averaging) in CFRSolver
-- [ ] T043 [US1] Implement External Sampling MCCFR in src/main/kotlin/com/nlhsolver/core/MCCFRSolver.kt (memory-efficient sampling)
-- [ ] T044 [US1] Implement exploitability calculation via best-response in src/main/kotlin/com/nlhsolver/core/ExploitabilityCalculator.kt
-- [ ] T045 [US1] Implement convergence detection in src/main/kotlin/com/nlhsolver/core/ConvergenceMonitor.kt (track exploitability over iterations)
-- [ ] T046 [US1] Add iteration limit handling (save partial results) in ConvergenceMonitor
+- [x] T040 [US1] Implement vanilla CFR in src/main/kotlin/com/nlhsolver/core/CFRSolver.kt (regret accumulation, strategy computation)
+- [x] T041 [US1] Add CFR+ optimizations: linear discounting for regrets in CFRSolver
+- [x] T042 [US1] Add Regret Matching+ (regret floor at 0, weighted averaging) in CFRSolver
+- [ ] T043 [US1] Implement External Sampling MCCFR in src/main/kotlin/com/nlhsolver/core/MCCFRSolver.kt (memory-efficient sampling) [OPTIONAL]
+- [x] T044 [US1] Implement exploitability calculation via best-response in src/main/kotlin/com/nlhsolver/core/ExploitabilityCalculator.kt
+- [x] T045 [US1] Implement convergence detection in src/main/kotlin/com/nlhsolver/core/ConvergenceMonitor.kt (track exploitability over iterations)
+- [x] T046 [US1] Add iteration limit handling (save partial results) in ConvergenceMonitor
 
 ### Solve Orchestration (US1)
 
-- [ ] T047 [US1] Implement SolveOrchestrator in src/main/kotlin/com/nlhsolver/solver/SolveOrchestrator.kt (coordinates tree building, CFR+ execution, convergence)
-- [ ] T048 [US1] Add synchronous solve execution (blocking until complete) in SolveOrchestrator
-- [ ] T049 [US1] Implement strategy extraction (convert regrets to final strategy) in src/main/kotlin/com/nlhsolver/solver/StrategyExtractor.kt
+- [x] T047 [US1] Implement SolveOrchestrator in src/main/kotlin/com/nlhsolver/solver/SolveOrchestrator.kt (coordinates tree building, CFR+ execution, convergence)
+- [x] T048 [US1] Add synchronous solve execution (blocking until complete) in SolveOrchestrator
+- [x] T049 [US1] Implement strategy extraction (convert regrets to final strategy) in src/main/kotlin/com/nlhsolver/solver/StrategyExtractor.kt
 
 ### Storage Layer (US1)
 
-- [ ] T050 [P] [US1] Define Protocol Buffers schema for SolveConfiguration in src/main/proto/configuration.proto
-- [ ] T051 [P] [US1] Define Protocol Buffers schema for SolveJob in src/main/proto/job.proto
-- [ ] T052 [P] [US1] Define Protocol Buffers schema for StrategyProfile in src/main/proto/strategy.proto
-- [ ] T053 [US1] Implement ConfigurationRepository in src/main/kotlin/com/nlhsolver/storage/ConfigurationRepository.kt (CRUD operations, file-based storage in data/configurations/)
-- [ ] T054 [US1] Implement JobRepository in src/main/kotlin/com/nlhsolver/storage/JobRepository.kt (CRUD operations, file-based storage in data/jobs/)
-- [ ] T055 [US1] Implement StrategyRepository in src/main/kotlin/com/nlhsolver/storage/StrategyRepository.kt (CRUD operations, file-based storage in data/strategies/)
-- [ ] T056 [US1] Add Protocol Buffers serialization/deserialization with gzip compression in repositories
+- [x] T050 [P] [US1] Define Protocol Buffers schema for SolveConfiguration in src/main/proto/configuration.proto
+- [x] T051 [P] [US1] Define Protocol Buffers schema for SolveJob in src/main/proto/job.proto
+- [x] T052 [P] [US1] Define Protocol Buffers schema for StrategyProfile in src/main/proto/strategy.proto
+- [x] T053 [US1] Implement ConfigurationRepository in src/main/kotlin/com/nlhsolver/storage/ConfigurationRepository.kt (CRUD operations, file-based storage in data/configurations/)
+- [x] T054 [US1] Implement JobRepository in src/main/kotlin/com/nlhsolver/storage/JobRepository.kt (CRUD operations, file-based storage in data/jobs/)
+- [x] T055 [US1] Implement StrategyRepository in src/main/kotlin/com/nlhsolver/storage/StrategyRepository.kt (CRUD operations, file-based storage in data/strategies/)
+- [x] T056 [US1] Add Protocol Buffers serialization/deserialization with gzip compression in repositories
 
 ### Strategy Query (US1)
 
-- [ ] T057 [US1] Implement StrategyQueryService in src/main/kotlin/com/nlhsolver/solver/StrategyQueryService.kt (look up strategy for game state)
-- [ ] T058 [US1] Implement game state hash function in src/main/kotlin/com/nlhsolver/core/GameStateHash.kt (canonical representation for lookups)
-- [ ] T059 [US1] Add strategy query validation (game state matches solve configuration) in StrategyQueryService
+- [x] T057 [US1] Implement StrategyQueryService in src/main/kotlin/com/nlhsolver/solver/StrategyQueryService.kt (look up strategy for game state)
+- [x] T058 [US1] Implement game state hash function in src/main/kotlin/com/nlhsolver/core/GameStateHash.kt (canonical representation for lookups)
+- [x] T059 [US1] Add strategy query validation (game state matches solve configuration) in StrategyQueryService
 
 ### REST API (US1)
 
-- [ ] T060 [P] [US1] Create Ktor application setup in src/main/kotlin/com/nlhsolver/api/Application.kt (routing, serialization, error handling)
-- [ ] T061 [P] [US1] Implement POST /api/v1/configurations endpoint in src/main/kotlin/com/nlhsolver/api/ConfigurationRoutes.kt
-- [ ] T062 [P] [US1] Implement GET /api/v1/configurations endpoint in ConfigurationRoutes.kt
-- [ ] T063 [P] [US1] Implement GET /api/v1/configurations/{id} endpoint in ConfigurationRoutes.kt
-- [ ] T064 [P] [US1] Implement POST /api/v1/jobs endpoint in src/main/kotlin/com/nlhsolver/api/JobRoutes.kt
-- [ ] T065 [P] [US1] Implement GET /api/v1/jobs endpoint in JobRoutes.kt
-- [ ] T066 [P] [US1] Implement GET /api/v1/jobs/{id} endpoint in JobRoutes.kt
-- [ ] T067 [P] [US1] Implement POST /api/v1/strategies/{id}/query endpoint in src/main/kotlin/com/nlhsolver/api/StrategyRoutes.kt
-- [ ] T068 [P] [US1] Implement GET /api/v1/health endpoint in src/main/kotlin/com/nlhsolver/api/HealthRoutes.kt
+- [x] T060 [P] [US1] Create Ktor application setup in src/main/kotlin/com/nlhsolver/api/Application.kt (routing, serialization, error handling)
+- [x] T061 [P] [US1] Implement POST /api/v1/configurations endpoint in src/main/kotlin/com/nlhsolver/api/ConfigurationRoutes.kt
+- [x] T062 [P] [US1] Implement GET /api/v1/configurations endpoint in ConfigurationRoutes.kt
+- [x] T063 [P] [US1] Implement GET /api/v1/configurations/{id} endpoint in ConfigurationRoutes.kt
+- [x] T064 [P] [US1] Implement POST /api/v1/jobs endpoint in src/main/kotlin/com/nlhsolver/api/JobRoutes.kt
+- [x] T065 [P] [US1] Implement GET /api/v1/jobs endpoint in JobRoutes.kt
+- [x] T066 [P] [US1] Implement GET /api/v1/jobs/{id} endpoint in JobRoutes.kt
+- [x] T067 [P] [US1] Implement POST /api/v1/strategies/{id}/query endpoint in src/main/kotlin/com/nlhsolver/api/StrategyRoutes.kt
+- [x] T068 [P] [US1] Implement GET /api/v1/health endpoint in src/main/kotlin/com/nlhsolver/api/HealthRoutes.kt
 
 ### CLI (US1)
 
-- [ ] T069 [P] [US1] Create Clikt CLI application in src/main/kotlin/com/nlhsolver/cli/NlhSolverCli.kt (main command group)
-- [ ] T070 [P] [US1] Implement `config create` command in src/main/kotlin/com/nlhsolver/cli/ConfigCommands.kt
-- [ ] T071 [P] [US1] Implement `config list` command in ConfigCommands.kt
-- [ ] T072 [P] [US1] Implement `config get <id>` command in ConfigCommands.kt
-- [ ] T073 [P] [US1] Implement `solve run` command in src/main/kotlin/com/nlhsolver/cli/SolveCommands.kt (synchronous execution)
-- [ ] T074 [P] [US1] Implement `job list` command in src/main/kotlin/com/nlhsolver/cli/JobCommands.kt
-- [ ] T075 [P] [US1] Implement `job status <id>` command in JobCommands.kt
-- [ ] T076 [P] [US1] Implement `strategy query <id>` command in src/main/kotlin/com/nlhsolver/cli/StrategyCommands.kt
-- [ ] T077 [US1] Add JSON and text output formatting in src/main/kotlin/com/nlhsolver/cli/OutputFormatter.kt
+- [x] T069 [P] [US1] Create Clikt CLI application in src/main/kotlin/com/nlhsolver/cli/NlhSolverCli.kt (main command group)
+- [x] T070 [P] [US1] Implement `config create` command in src/main/kotlin/com/nlhsolver/cli/ConfigCommands.kt
+- [x] T071 [P] [US1] Implement `config list` command in ConfigCommands.kt
+- [x] T072 [P] [US1] Implement `config get <id>` command in ConfigCommands.kt
+- [x] T073 [P] [US1] Implement `solve run` command in src/main/kotlin/com/nlhsolver/cli/SolveCommands.kt (synchronous execution)
+- [x] T074 [P] [US1] Implement `job list` command in src/main/kotlin/com/nlhsolver/cli/JobCommands.kt
+- [x] T075 [P] [US1] Implement `job status <id>` command in JobCommands.kt
+- [x] T076 [P] [US1] Implement `strategy query <id>` command in src/main/kotlin/com/nlhsolver/cli/StrategyCommands.kt
+- [x] T077 [US1] Add JSON and text output formatting in src/main/kotlin/com/nlhsolver/cli/OutputFormatter.kt
 
 **User Story 1 Completion Criteria**:
 - ✓ User can create 2-player configuration via CLI: `nlhsolver config create --players 2 --stacks "BTN:100,BB:100" --position BTN`
