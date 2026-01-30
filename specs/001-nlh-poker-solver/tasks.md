@@ -506,6 +506,108 @@ Phase 7: Polish & Cross-Cutting Concerns
 
 ---
 
+## Phase 8: Blueprint + Refinement Workflow
+
+**Goal**: Two-phase approach for deriving GTO preflop ranges and precise postflop strategies.
+
+**Motivation**: Solving from preflop with fine abstraction is computationally intractable. This phase implements:
+1. **Blueprint Phase**: Derive preflop ranges with heavy abstraction (fast, ~1-2 hours)
+2. **Refinement Phase**: Solve postflop spots with fine abstraction using blueprint ranges (precise)
+
+This approach is used by research bots (Libratus, Pluribus) and enables:
+- Deriving preflop ranges for various scenarios (antes, stack depths, positions)
+- Getting precise postflop play without re-solving preflop every time
+- Measurable quality via EV loss analysis
+
+**Tasks**: 24
+
+### Coarse Abstraction Support (Blueprint Phase)
+
+- [ ] T124 [P] Extend HandAbstraction to support configurable bucket counts per street in src/main/kotlin/com/nlhsolver/solver/HandAbstraction.kt
+- [ ] T125 [P] Add CoarsePreflopBucketing with 8-15 buckets in src/main/kotlin/com/nlhsolver/poker/CoarsePreflopBucketing.kt (Premium pairs, Medium pairs, Small pairs, Broadway, Suited connectors, etc.)
+- [ ] T126 [P] Add BoardClustering configuration in src/main/kotlin/com/nlhsolver/poker/BoardClustering.kt (configurable flop/turn/river cluster counts)
+- [ ] T127 [P] Implement aggressive board clustering (22,100 flops → 100 clusters) in BoardClustering.kt using texture-based grouping
+- [ ] T128 Update SolveConfiguration to accept abstraction settings (coarse vs fine) for blueprint mode
+
+### Blueprint Solving
+
+- [ ] T129 Create BlueprintConfiguration in src/main/kotlin/com/nlhsolver/solver/BlueprintConfiguration.kt (scenario name, stack depth, ante, positions)
+- [ ] T130 Implement BlueprintSolver in src/main/kotlin/com/nlhsolver/solver/BlueprintSolver.kt (wrapper around SolveOrchestrator with coarse abstraction)
+- [ ] T131 Add blueprint solve with full range solving (btnRange = All, bbRange = All) in BlueprintSolver
+- [ ] T132 Add convergence criteria for blueprints (looser: 1% exploitability) in BlueprintConfiguration
+
+### Range Export/Import
+
+- [ ] T133 [P] Create BlueprintRange data class in src/main/kotlin/com/nlhsolver/solver/BlueprintRange.kt (hand → action frequencies map)
+- [ ] T134 [P] Implement range extraction from strategy in src/main/kotlin/com/nlhsolver/solver/RangeExtractor.kt (extract opening/defense frequencies)
+- [ ] T135 [P] Add Protocol Buffers schema for BlueprintRange in src/main/proto/blueprint.proto
+- [ ] T136 Implement BlueprintRepository in src/main/kotlin/com/nlhsolver/storage/BlueprintRepository.kt (save/load blueprint ranges)
+- [ ] T137 Add range export to JSON format in RangeExtractor (human-readable format)
+- [ ] T138 Add range import from JSON in RangeExtractor (for manual editing)
+
+### EV Loss Measurement
+
+- [ ] T139 Create EVLossAnalyzer in src/main/kotlin/com/nlhsolver/solver/EVLossAnalyzer.kt (compare blueprint vs refined strategies)
+- [ ] T140 Implement sample-based EV comparison (select representative boards, solve with fine abstraction, compare EVs) in EVLossAnalyzer
+- [ ] T141 Add hand-weighted EV loss calculation (weight by frequency in range) in EVLossAnalyzer
+- [ ] T142 Add acceptable threshold checking (default: 2% of pot) and reporting in EVLossAnalyzer
+
+### Refinement Phase
+
+- [ ] T143 Create RefinementConfiguration in src/main/kotlin/com/nlhsolver/solver/RefinementConfiguration.kt (blueprint ID, specific board, fine abstraction)
+- [ ] T144 Implement range filtering with card removal in src/main/kotlin/com/nlhsolver/solver/RangeFilter.kt (filter blueprint ranges for specific board)
+- [ ] T145 Implement range renormalization after filtering in RangeFilter (re-weight to sum to 1.0)
+- [ ] T146 Add RefinementSolver in src/main/kotlin/com/nlhsolver/solver/RefinementSolver.kt (solve postflop with blueprint ranges + fine abstraction)
+
+### CLI Commands
+
+- [ ] T147 [P] Implement `blueprint solve` command in src/main/kotlin/com/nlhsolver/cli/BlueprintCommands.kt (solve blueprint for scenario)
+- [ ] T148 [P] Implement `blueprint list` command in BlueprintCommands.kt (list all blueprints)
+- [ ] T149 [P] Implement `blueprint show` command in BlueprintCommands.kt (show blueprint ranges and metadata)
+- [ ] T150 [P] Implement `blueprint analyze-ev-loss` command in BlueprintCommands.kt (measure EV loss vs fine abstraction)
+- [ ] T151 [P] Implement `refine solve` command in src/main/kotlin/com/nlhsolver/cli/RefinementCommands.kt (solve specific board with blueprint ranges)
+- [ ] T152 [P] Implement `refine compare` command in RefinementCommands.kt (compare blueprint vs refined strategies)
+
+### Integration & Testing
+
+- [ ] T153 Create integration test for blueprint solving in src/test/kotlin/com/nlhsolver/integration/BlueprintSolveTest.kt (100bb no ante scenario)
+- [ ] T154 Create integration test for EV loss measurement in src/test/kotlin/com/nlhsolver/integration/EVLossTest.kt (verify < 2% threshold)
+- [ ] T155 Create integration test for refinement solving in src/test/kotlin/com/nlhsolver/integration/RefinementSolveTest.kt (Ks7h2d with blueprint ranges)
+
+**Phase 8 Completion Criteria**:
+- ✓ Blueprint solves complete in 1-2 hours with coarse abstraction
+- ✓ EV loss < 2% pot when measured vs fine abstraction
+- ✓ Range export/import working for manual editing
+- ✓ Refinement solves use blueprint ranges correctly
+- ✓ Can derive ranges for multiple scenarios (stack depths, antes)
+- ✓ All CLI commands functional
+
+**Example Workflow**:
+```bash
+# 1. Solve blueprint (1-2 hours)
+./gradlew run --args="blueprint solve \
+  --name '100bb_noante_btn_vs_bb' \
+  --stacks 'BTN:100,BB:100' \
+  --ante 0 \
+  --buckets 'preflop:8,flop:25,turn:15,river:10'"
+
+# 2. Measure EV loss
+./gradlew run --args="blueprint analyze-ev-loss 100bb_noante_btn_vs_bb"
+# Output: "EV loss: 1.8% (acceptable, < 2% threshold)"
+
+# 3. Solve specific board with blueprint ranges (10-30 min)
+./gradlew run --args="refine solve \
+  --blueprint 100bb_noante_btn_vs_bb \
+  --board Ks7h2d \
+  --buckets 'flop:50,turn:30,river:20'"
+
+# 4. Query refined strategy
+./gradlew run --args="strategy range <refined-id> \
+  --position BB --street FLOP --board Ks7h2d --facing check"
+```
+
+---
+
 ## Parallel Execution Opportunities
 
 ### Setup Phase (T002-T006, T008-T010)
@@ -568,6 +670,27 @@ Run in parallel after Phase 6:
 T111, T112, T113, T114, T115, T116, T117, T118, T119, T120, T121
 ```
 
+### Phase 8 - Blueprint Abstraction (T124-T128)
+Run in parallel after MVP complete:
+```bash
+# Abstraction components are independent
+T124, T125, T126, T127, T128
+```
+
+### Phase 8 - Range Export/Import (T133-T138)
+Run in parallel after T132:
+```bash
+# Range handling components are independent
+T133, T134, T135, T136, T137, T138
+```
+
+### Phase 8 - CLI Commands (T147-T152)
+Run in parallel after T146:
+```bash
+# CLI commands are independent
+T147, T148, T149, T150, T151, T152
+```
+
 ---
 
 ## Task Summary by User Story
@@ -584,7 +707,8 @@ T111, T112, T113, T114, T115, T116, T117, T118, T119, T120, T121
 | US3: Background/Remote | P3 | 15 | 7 | Async/remote execution |
 | US4: Progress Monitoring | P3 | 8 | 6 | Real-time progress |
 | Polish | - | 13 | 11 | Error handling, docs |
-| **TOTAL** | - | **155** | **88** | - |
+| **P8: Blueprint + Refinement** | **P2** | **24** | **14** | **Preflop range derivation** |
+| **TOTAL** | - | **179** | **102** | - |
 
 ### Phased Development Milestones
 
@@ -594,6 +718,8 @@ T111, T112, T113, T114, T115, T116, T117, T118, T119, T120, T121
 | Phase 2.6 Complete | Multi-street CFR (preflop + flop) | ~500MB | minutes |
 | Phase 2.7 Complete | Abstraction correctness | ~2GB | minutes |
 | Phase 3 Complete | Full game tree MVP | ~8-16GB | hours |
+| Phase 8 Complete | Blueprint preflop ranges | ~2GB | 1-2 hours |
+| Phase 8 Complete | Postflop refinement | ~500MB | 10-30 min per board |
 
 ---
 
@@ -628,6 +754,16 @@ T111, T112, T113, T114, T115, T116, T117, T118, T119, T120, T121
 - CLI and REST API interfaces
 - Strategy query for any game state
 - File-based persistence with Protocol Buffers
+
+### Phase 8: Blueprint + Refinement Workflow
+**Tasks**: T124-T155 (24 tasks)
+**Deliverables**:
+- Coarse abstraction support (8-15 preflop buckets, 100 flop clusters)
+- Blueprint solving for preflop range derivation (1-2 hours per scenario)
+- Range export/import (JSON and Protocol Buffers)
+- EV loss measurement (< 2% pot threshold)
+- Refinement solving with blueprint ranges (10-30 min per board)
+- CLI commands for blueprint and refinement workflows
 
 **Post-MVP**: Deliver US2, US3, US4 independently as incremental enhancements.
 
