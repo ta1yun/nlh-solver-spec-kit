@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package com.nlhsolver.proto;
+
+// Protocol Buffers schema for BlueprintRange (T135)
+// Defines wire format for storing and transmitting blueprint ranges
+
+// A blueprint range for a specific position and action point
+message BlueprintRangeProto {
+  // Blueprint ID this range comes from
+  string blueprint_id = 1;
+
+  // Position (BTN, BB, etc.)
+  string position = 2;
+
+  // Action point description (e.g., "Preflop Opening", "BB vs BTN Raise")
+  string action_point = 3;
+
+  // Map from canonical hand notation to action frequencies
+  map<string, ActionFrequenciesProto> hand_frequencies = 4;
+
+  // Range metadata
+  RangeMetadataProto metadata = 5;
+}
+
+// Action frequencies for a single hand
+message ActionFrequenciesProto {
+  // Frequency of folding [0.0, 1.0]
+  double fold = 1;
+
+  // Frequency of calling [0.0, 1.0]
+  double call = 2;
+
+  // Frequency of raising [0.0, 1.0]
+  double raise = 3;
+
+  // Frequency of checking [0.0, 1.0]
+  double check = 4;
+
+  // Frequency of betting [0.0, 1.0]
+  double bet = 5;
+
+  // Frequency of going all-in [0.0, 1.0]
+  double allin = 6;
+}
+
+// Metadata about the range
+message RangeMetadataProto {
+  // Timestamp when range was extracted (ISO-8601 format)
+  string extracted_at = 1;
+
+  // Scenario name (e.g., "HU 100bb No Ante")
+  string scenario_name = 2;
+
+  // Stack size in big blinds
+  double stack_size = 3;
+
+  // Ante size in big blinds
+  double ante = 4;
+
+  // Optional notes
+  string notes = 5;
+}
+
+// Collection of blueprint ranges
+message BlueprintRangeCollectionProto {
+  // All ranges for this blueprint
+  repeated BlueprintRangeProto ranges = 1;
+
+  // Blueprint configuration ID
+  string blueprint_id = 2;
+
+  // Scenario name
+  string scenario_name = 3;
+
+  // Version info
+  int32 version = 4;
+}
