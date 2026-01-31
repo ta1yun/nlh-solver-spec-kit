@@ -37,7 +37,9 @@ fun main(args: Array<String>) {
             ConfigCommand(),
             SolveCommand(),
             JobCommand(),
-            StrategyCommand()
+            StrategyCommand(),
+            blueprintCommand(),
+            refinementCommand()
         )
         .main(args)
 }
