@@ -1,5 +1,7 @@
 package com.nlhsolver.solver
 
+import com.nlhsolver.common.InvalidGameStateException
+import com.nlhsolver.common.StrategyNotFoundException
 import com.nlhsolver.core.GameStateHash
 import com.nlhsolver.core.PokerGameState
 import com.nlhsolver.core.StrategyProfile as CoreStrategyProfile
@@ -614,16 +616,6 @@ data class StrategyStatistics(
     val averageActionsPerInfoSet: Double,
     val exploitability: Double
 )
-
-/**
- * Exception thrown when a strategy is not found.
- */
-class StrategyNotFoundException(message: String) : Exception(message)
-
-/**
- * Exception thrown when a game state is invalid for querying.
- */
-class InvalidGameStateException(message: String) : Exception(message)
 
 /**
  * Result of a canonical hand query (Phase 2.5, T219).
