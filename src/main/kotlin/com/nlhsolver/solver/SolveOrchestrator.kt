@@ -1,5 +1,9 @@
 package com.nlhsolver.solver
 
+import com.nlhsolver.common.MemoryGuard
+import com.nlhsolver.common.logger
+import com.nlhsolver.common.logSolveStart
+import com.nlhsolver.common.logSolveComplete
 import com.nlhsolver.core.*
 import com.nlhsolver.poker.Card
 import java.nio.file.Path
@@ -8,7 +12,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Orchestrates the end-to-end solve process (T047-T048).
+ * Orchestrates the end-to-end solve process (T047-T048, T117).
  *
  * Coordinates:
  * 1. Game tree construction from configuration
@@ -16,11 +20,13 @@ import java.util.UUID
  * 3. Strategy extraction and persistence
  *
  * Supports both synchronous (blocking) and asynchronous execution.
+ * Uses structured logging for observability.
  */
 class SolveOrchestrator(
     private val strategyExtractor: StrategyExtractor = StrategyExtractor(),
     private val strategyRepository: com.nlhsolver.storage.StrategyRepository = com.nlhsolver.storage.StrategyRepository()
 ) {
+    private val logger = logger()
     /**
      * Execute a solve synchronously (blocking until completion).
      *
@@ -39,6 +45,16 @@ class SolveOrchestrator(
         if (validationResult is ValidationResult.Failure) {
             throw IllegalArgumentException("Invalid configuration: ${validationResult.errors.joinToString(", ")}")
         }
+
+        // T115: Check memory before starting solve (OOM graceful degradation)
+        val estimatedMemoryMB = MemoryGuard.estimateMemoryRequired(
+            configuration.handAbstraction.numBuckets.takeIf { configuration.handAbstraction.mode != AbstractionMode.NONE }
+        )
+        logger.info("Memory check",
+            "estimated" to "${estimatedMemoryMB}MB",
+            "stats" to MemoryGuard.getMemoryStats()
+        )
+        MemoryGuard.checkSufficientMemory(requiredMB = estimatedMemoryMB)
 
         // Create CFR solver
         val cfrSolver = CFRSolver(
@@ -75,7 +91,7 @@ class SolveOrchestrator(
             bbRange = effectiveConfig.bbRange
         )
         val allMatchups = if (maxMatchups != null && maxMatchups > 0) {
-            println("  [TEST MODE] Limiting to $maxMatchups matchups")
+            logger.warn("TEST MODE - Limiting matchups", "limit" to maxMatchups)
             allMatchupsRaw.take(maxMatchups)
         } else {
             allMatchupsRaw
@@ -116,15 +132,21 @@ class SolveOrchestrator(
             )
         }
 
-        println("Unified range-based solving: ${configuration.startingStreet.name}")
-        println("  Original board: ${if (configuration.board.isEmpty()) "(empty)" else configuration.board.joinToString("")}")
+        logger.info("Starting unified range-based solve",
+            "street" to configuration.startingStreet.name,
+            "board" to if (configuration.board.isEmpty()) "(empty)" else configuration.board.joinToString(""),
+            "matchups" to allMatchups.size,
+            "totalWeight" to String.format("%.2f", totalWeight),
+            "pot" to configuration.pot,
+            "abstraction" to if (effectiveMode == AbstractionMode.EQUITY_BUCKETING) "${effectiveMode.name} ($numBuckets buckets)" else effectiveMode.name
+        )
+
         if (effectiveConfig.board != configuration.board && configuration.board.isNotEmpty()) {
-            println("  Canonical board: ${effectiveConfig.board.joinToString("")} (suit isomorphism)")
+            logger.info("Using canonical board (suit isomorphism)",
+                "original" to configuration.board.joinToString(""),
+                "canonical" to effectiveConfig.board.joinToString("")
+            )
         }
-        println("  Total matchups: ${allMatchups.size}")
-        println("  Total weight: ${"%.2f".format(totalWeight)}")
-        println("  Pot: ${configuration.pot}")
-        println("  Abstraction mode: ${effectiveMode.name}${if (effectiveMode == AbstractionMode.EQUITY_BUCKETING) " ($numBuckets buckets)" else ""}")
 
         // Start convergence monitoring
         convergenceMonitor.start()
@@ -163,9 +185,12 @@ class SolveOrchestrator(
 
             // Debug: Log exploitability on first check
             if (currentIteration == configuration.convergenceCriteria.evaluationFrequency) {
-                println("DEBUG: First exploitability check at iteration $currentIteration")
-                println("  Weighted average exploitability: ${"%.4f".format(avgExploitability)} (${"%.2f".format(avgExploitability * 100)}%)")
-                println("  Total matchups evaluated: ${weightedStates.size}")
+                logger.debug("First exploitability check",
+                    "iteration" to currentIteration,
+                    "exploitability" to String.format("%.4f", avgExploitability),
+                    "exploitabilityPct" to String.format("%.2f%%", avgExploitability * 100),
+                    "matchups" to weightedStates.size
+                )
             }
 
             // Use first root state for convergence check, but override exploitability with average

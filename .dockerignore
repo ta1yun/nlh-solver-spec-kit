@@ -1,0 +1,44 @@
+# Git files
+.git
+.gitignore
+
+# Build artifacts
+build/
+.gradle/
+out/
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Data and logs (will be mounted as volumes)
+data/
+logs/
+
+# Test files
+src/test/
+
+# Documentation
+README.md
+docs/
+*.md
+
+# CI/CD
+.github/
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
