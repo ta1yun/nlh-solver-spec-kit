@@ -122,6 +122,20 @@ tasks.register<JavaExec>("verifyPhase2") {
     mainClass.set("com.nlhsolver.VerifyPhase2Kt")
 }
 
+// Task to run production blueprint solve
+tasks.register<JavaExec>("runProductionBlueprint") {
+    group = "application"
+    description = "Run production blueprint solve (100bb HU, 1-2 hours)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.nlhsolver.examples.RunProductionBlueprintKt")
+
+    // Production memory settings
+    jvmArgs = listOf("-Xmx8g", "-Xms4g", "-XX:+UseG1GC")
+
+    // Make it interactive
+    standardInput = System.`in`
+}
+
 // Test configuration
 tasks.test {
     useJUnitPlatform()
