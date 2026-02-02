@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'NLH Solver on AWS - Long-running blueprint solve on EC2'
+
+Parameters:
+  InstanceType:
+    Description: EC2 instance type for solver
+    Type: String
+    Default: c6i.4xlarge  # 16 vCPU, 32GB RAM - good for blueprint solving
+    AllowedValues:
+      - c6i.2xlarge   # 8 vCPU, 16GB RAM - ~$0.34/hr
+      - c6i.4xlarge   # 16 vCPU, 32GB RAM - ~$0.68/hr (recommended)
+      - c6i.8xlarge   # 32 vCPU, 64GB RAM - ~$1.36/hr
+      - r6i.2xlarge   # 8 vCPU, 64GB RAM - ~$0.50/hr (memory-intensive)
+      - r6i.4xlarge   # 16 vCPU, 128GB RAM - ~$1.01/hr
+
+  KeyName:
+    Description: EC2 KeyPair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+
+  AllowedSSHCIDR:
+    Description: IP CIDR allowed to SSH (use your IP/32)
+    Type: String
+    Default: 0.0.0.0/0
+
+Resources:
+  SolverSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and API access to NLH Solver
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCIDR
+          Description: SSH access
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+          Description: API access
+      Tags:
+        - Key: Name
+          Value: nlh-solver-sg
+
+  SolverInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      SecurityGroups:
+        - !Ref SolverSecurityGroup
+      IamInstanceProfile: !Ref SolverInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            DeleteOnTermination: false  # Preserve data after instance termination
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Update system
+          yum update -y
+
+          # Install Docker
+          yum install -y docker git
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker ec2-user
+
+          # Install Docker Compose
+          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+
+          # Clone repository (replace with your repo URL)
+          cd /home/ec2-user
+          git clone https://github.com/yourusername/nlh-solver-spec-kit.git
+          cd nlh-solver-spec-kit
+          chown -R ec2-user:ec2-user /home/ec2-user/nlh-solver-spec-kit
+
+          # Create data directories with proper permissions
+          mkdir -p data/blueprints data/strategies logs
+          chown -R ec2-user:ec2-user data logs
+
+          # Build and start Docker container
+          docker-compose build
+
+          # Start API server (accessible on port 8080)
+          docker-compose up -d api
+
+          # Output access information
+          INSTANCE_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+          echo "NLH Solver deployed!" > /home/ec2-user/deployment-info.txt
+          echo "API: http://$INSTANCE_IP:8080" >> /home/ec2-user/deployment-info.txt
+          echo "SSH: ssh -i your-key.pem ec2-user@$INSTANCE_IP" >> /home/ec2-user/deployment-info.txt
+          echo "" >> /home/ec2-user/deployment-info.txt
+          echo "To run blueprint solve:" >> /home/ec2-user/deployment-info.txt
+          echo "  ssh ec2-user@$INSTANCE_IP" >> /home/ec2-user/deployment-info.txt
+          echo "  cd nlh-solver-spec-kit" >> /home/ec2-user/deployment-info.txt
+          echo "  ./run-blueprint-solve.sh start" >> /home/ec2-user/deployment-info.txt
+
+          chown ec2-user:ec2-user /home/ec2-user/deployment-info.txt
+
+      Tags:
+        - Key: Name
+          Value: nlh-solver-instance
+        - Key: Application
+          Value: nlh-solver
+        - Key: Environment
+          Value: production
+
+  SolverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+        - Key: Name
+          Value: nlh-solver-role
+
+  SolverInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref SolverRole
+
+  # Optional: EIP for stable IP address
+  SolverEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref SolverInstance
+      Tags:
+        - Key: Name
+          Value: nlh-solver-eip
+
+Outputs:
+  InstanceId:
+    Description: Instance ID
+    Value: !Ref SolverInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  PublicIP:
+    Description: Public IP address
+    Value: !Ref SolverEIP
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  APIURL:
+    Description: API endpoint
+    Value: !Sub 'http://${SolverEIP}:8080'
+    Export:
+      Name: !Sub '${AWS::StackName}-APIURL'
+
+  SSHCommand:
+    Description: SSH command
+    Value: !Sub 'ssh -i ${KeyName}.pem ec2-user@${SolverEIP}'
+
+  EstimatedCost:
+    Description: Estimated hourly cost (USD)
+    Value: !Sub 'Approximately $0.68/hour for c6i.4xlarge in us-east-1'
