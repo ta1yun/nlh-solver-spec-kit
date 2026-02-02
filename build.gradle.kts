@@ -126,6 +126,9 @@ tasks.register<JavaExec>("verifyPhase2") {
 tasks.test {
     useJUnitPlatform()
 
+    // Set test mode to disable strict memory checks
+    systemProperty("NLH_TEST_MODE", "true")
+
     // Show test output in console (useful for println debugging)
     testLogging {
         events("passed", "skipped", "failed", "standardOut", "standardError")

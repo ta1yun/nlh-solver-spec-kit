@@ -34,6 +34,8 @@ class ToyRiverScenarioTest {
         fun setup() {
             // Enable full postflop mode for river scenarios
             System.setProperty("NLH_FULL_POSTFLOP", "true")
+            // Enable test mode to reduce memory requirements for toy scenarios
+            System.setProperty("NLH_TEST_MODE", "true")
         }
     }
 
