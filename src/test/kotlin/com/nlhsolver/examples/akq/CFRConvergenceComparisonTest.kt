@@ -1,6 +1,7 @@
 package com.nlhsolver.examples.akq
 
 import com.nlhsolver.core.CFRSolver
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
@@ -14,6 +15,7 @@ import kotlin.math.abs
  *
  * One valid Nash equilibrium is α ≈ 1/3 for Q bluffs.
  */
+@Tag("slow")
 class CFRConvergenceComparisonTest {
 
     @Test

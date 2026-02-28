@@ -138,7 +138,11 @@ tasks.register<JavaExec>("runProductionBlueprint") {
 
 // Test configuration
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (!project.hasProperty("slow")) {
+            excludeTags("slow")
+        }
+    }
 
     // Set test mode to disable strict memory checks
     systemProperty("NLH_TEST_MODE", "true")

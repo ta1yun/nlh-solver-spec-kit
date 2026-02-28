@@ -35,6 +35,9 @@ case "$1" in
         echo "  Machine: $MACHINE_TYPE"
         echo ""
 
+        # Hard cap: instance auto-terminates after 3 hours (~$2 max spend)
+        MAX_RUN_DURATION="${GCP_MAX_RUN_DURATION:-10800s}"  # 3 hours default
+
         # Create instance with startup script
         gcloud compute instances create "$INSTANCE_NAME" \
             --project="$PROJECT" \
@@ -46,7 +49,9 @@ case "$1" in
             --tags=http-server,https-server,nlh-solver \
             --create-disk=auto-delete=no,boot=yes,device-name="$INSTANCE_NAME",image=projects/$IMAGE_PROJECT/global/images/family/$IMAGE_FAMILY,mode=rw,size=$DISK_SIZE,type=projects/$PROJECT/zones/$ZONE/diskTypes/pd-balanced \
             --metadata-from-file=startup-script=startup-script.sh \
-            --scopes=https://www.googleapis.com/auth/cloud-platform
+            --scopes=https://www.googleapis.com/auth/cloud-platform \
+            --max-run-duration="$MAX_RUN_DURATION" \
+            --instance-termination-action=DELETE
 
         echo ""
         echo "✓ Instance created!"
@@ -69,7 +74,8 @@ case "$1" in
         echo "  ./run-blueprint-solve.sh start"
         echo ""
         echo "Estimated cost: ~\$0.65/hour (n2-highcpu-16)"
-        echo "Remember to delete when done: ./deploy.sh delete $INSTANCE_NAME"
+        echo "Hard cap: instance auto-deletes after ${MAX_RUN_DURATION} (~\$2 max)"
+        echo "Remember to delete early when done: ./deploy.sh delete $INSTANCE_NAME"
         ;;
 
     ssh)

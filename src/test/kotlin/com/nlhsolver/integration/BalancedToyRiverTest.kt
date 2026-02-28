@@ -2,6 +2,7 @@ package com.nlhsolver.integration
 
 import com.nlhsolver.poker.*
 import com.nlhsolver.solver.*
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.BeforeAll
 
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeAll
  *
  * This should converge to near-0% exploitability.
  */
+@Tag("slow")
 class BalancedToyRiverTest {
 
     companion object {

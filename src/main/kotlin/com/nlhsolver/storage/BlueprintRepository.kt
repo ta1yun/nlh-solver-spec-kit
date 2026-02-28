@@ -3,7 +3,7 @@ package com.nlhsolver.storage
 import com.nlhsolver.solver.BlueprintConfiguration
 import com.nlhsolver.solver.BlueprintRange
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -47,16 +47,20 @@ class BlueprintRepository(
 
         val configPath = blueprintDir.resolve("config.json.gz")
 
-        // Serialize as simple map (avoiding complex types)
-        val configMap = mapOf(
-            "blueprintId" to config.blueprintId.toString(),
-            "scenarioName" to config.scenarioName,
-            "stackSizes" to config.stackSizes.mapKeys { it.key.name },
-            "ante" to config.ante,
-            "preflopBuckets" to config.preflopBuckets,
-            "status" to config.solveStatus.name
-        )
-        val jsonString = json.encodeToString(configMap)
+        // Build JSON object manually to avoid serialization issues with Any
+        val jsonObject = buildJsonObject {
+            put("blueprintId", config.blueprintId.toString())
+            put("scenarioName", config.scenarioName)
+            putJsonObject("stackSizes") {
+                config.stackSizes.forEach { (position, size) ->
+                    put(position.name, size)
+                }
+            }
+            put("ante", config.ante)
+            put("preflopBuckets", config.preflopBuckets)
+            put("status", config.solveStatus.name)
+        }
+        val jsonString = json.encodeToString(JsonObject.serializer(), jsonObject)
 
         FileOutputStream(configPath.toFile()).use { fileOut ->
             GZIPOutputStream(fileOut).use { gzipOut ->
@@ -146,16 +150,16 @@ class BlueprintRepository(
                     gzipIn.readBytes().toString(Charsets.UTF_8)
                 }
             }
-            val configMap = json.decodeFromString<Map<String, Any>>(jsonString)
+            val jsonObject = json.decodeFromString<JsonObject>(jsonString)
 
-            // Reconstruct BlueprintConfiguration from map (basic fields only for now)
+            // Reconstruct BlueprintConfiguration from JsonObject (basic fields only for now)
             // This is a simplified version - full implementation would restore all fields
             BlueprintConfiguration.headsUp(
                 stackSize = 100.0,  // Default for tests
-                preflopBuckets = (configMap["preflopBuckets"] as? Double)?.toInt() ?: 8
+                preflopBuckets = jsonObject["preflopBuckets"]?.jsonPrimitive?.int ?: 8
             ).copy(
-                blueprintId = UUID.fromString(configMap["blueprintId"] as String),
-                scenarioName = configMap["scenarioName"] as String
+                blueprintId = UUID.fromString(jsonObject["blueprintId"]?.jsonPrimitive?.content),
+                scenarioName = jsonObject["scenarioName"]?.jsonPrimitive?.content ?: ""
             )
         } catch (e: Exception) {
             null

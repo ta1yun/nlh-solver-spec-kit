@@ -37,8 +37,8 @@ case "${1:-start}" in
         echo "Starting in 3 seconds..."
         sleep 3
 
-        # Start tmux session with the solve command
-        tmux new-session -d -s "$SESSION_NAME" "cd $(pwd) && ./gradlew runProductionBlueprint --console=plain --no-daemon 2>&1 | tee logs/blueprint-solve-$(date +%Y%m%d-%H%M%S).log; echo 'Press Enter to close'; read"
+        # Start tmux session with the solve command (auto-answer "yes")
+        tmux new-session -d -s "$SESSION_NAME" "cd $(pwd) && echo 'yes' | ./gradlew runProductionBlueprint --console=plain --no-daemon 2>&1 | tee logs/blueprint-solve-$(date +%Y%m%d-%H%M%S).log; echo 'Press Enter to close'; read"
 
         echo ""
         echo "✓ Session started!"

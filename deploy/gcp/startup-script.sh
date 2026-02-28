@@ -7,7 +7,7 @@ echo "Starting NLH Solver deployment..."
 
 # Update system
 apt-get update
-apt-get install -y docker.io docker-compose git tmux
+apt-get install -y docker.io docker-compose git tmux openjdk-21-jdk gradle
 
 # Start Docker
 systemctl start docker
