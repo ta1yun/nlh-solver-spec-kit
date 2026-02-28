@@ -21,6 +21,10 @@ tests/
 
 Kotlin 1.9+ with JVM target (Java 17+): Follow standard conventions
 
+## Git Commit Guidelines
+
+- Keep commit messages to a single line (no multi-line descriptions)
+
 ## Recent Changes
 
 - 001-nlh-poker-solver: Added Kotlin 1.9+ with JVM target (Java 17+)
