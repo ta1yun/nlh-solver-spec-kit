@@ -74,33 +74,40 @@ class RangeExtractor {
             }
         }
 
-        // Map buckets to canonical hands using PreflopBuckets
+        // Map bucket IDs to canonical hands
+        // For preflop, bucket ID is the canonical hand index (0-168)
         val handFrequencies = mutableMapOf<String, ActionFrequencies>()
-        val bucketingScheme = PreflopBuckets.getBucketingScheme(config.preflopBuckets)
 
+        for ((bucketId, strategy) in bucketStrategies) {
+            // Get the canonical hand for this bucket
+            val hand = try {
+                PreflopBuckets.getHand(bucketId)
+            } catch (e: Exception) {
+                // Bucket ID out of range (0-168), skip it
+                continue
+            }
+
+            // Map strategy array to ActionFrequencies
+            // Assuming actions are [check/limp, raise] or [fold, call, raise]
+            // For BTN preflop, likely [check, raise] since fold isn't an option
+            val freqs = when (strategy.size) {
+                2 -> ActionFrequencies(
+                    check = strategy[0],  // limp/check
+                    raise = strategy[1]   // raise
+                )
+                3 -> ActionFrequencies(
+                    fold = strategy[0],
+                    call = strategy[1],
+                    raise = strategy[2]
+                )
+                else -> ActionFrequencies(fold = 1.0)  // Default to fold if unknown format
+            }
+            handFrequencies[hand.notation] = freqs
+        }
+
+        // Fill in missing hands with default (not encountered in limited matchups)
         for (hand in PreflopBuckets.allHands) {
-            val bucket = bucketingScheme.getBucket(hand)
-            val strategy = bucketStrategies[bucket]
-
-            if (strategy != null) {
-                // Map strategy array to ActionFrequencies
-                // Assuming actions are [check/limp, raise] or [fold, call, raise]
-                // For BTN preflop, likely [check, raise] since fold isn't an option
-                val freqs = when (strategy.size) {
-                    2 -> ActionFrequencies(
-                        check = strategy[0],  // limp/check
-                        raise = strategy[1]   // raise
-                    )
-                    3 -> ActionFrequencies(
-                        fold = strategy[0],
-                        call = strategy[1],
-                        raise = strategy[2]
-                    )
-                    else -> ActionFrequencies(fold = 1.0)  // Default to fold if unknown format
-                }
-                handFrequencies[hand.notation] = freqs
-            } else {
-                // Bucket not in solved strategy (not encountered in limited matchups)
+            if (hand.notation !in handFrequencies) {
                 handFrequencies[hand.notation] = ActionFrequencies(fold = 1.0)
             }
         }
