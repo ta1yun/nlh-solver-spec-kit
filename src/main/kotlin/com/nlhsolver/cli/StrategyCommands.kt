@@ -32,7 +32,8 @@ class StrategyCommand : CliktCommand(
             StrategyHandCommand(),
             StrategyRangeCommand(),
             StrategyInspectCommand(),
-            StrategyExtractRangeCommand()
+            StrategyExtractRangeCommand(),
+            StrategyDecodeBucketCommand()
         )
     }
 
@@ -545,6 +546,39 @@ class StrategyExtractRangeCommand : CliktCommand(
         } catch (e: Exception) {
             echo(OutputFormatter.formatError(e.message ?: "Failed to extract range"))
             e.printStackTrace()
+        }
+    }
+}
+
+/**
+ * Decode bucket IDs to canonical hands.
+ */
+class StrategyDecodeBucketCommand : CliktCommand(
+    name = "decode-bucket",
+    help = "Decode preflop bucket IDs to canonical hand notation"
+) {
+    private val buckets by argument(help = "Bucket IDs (space-separated)").multiple()
+
+    override fun run() {
+        if (buckets.isEmpty()) {
+            echo("Usage: strategy decode-bucket <bucket-id> [<bucket-id> ...]")
+            echo("Example: strategy decode-bucket 165 134 143")
+            return
+        }
+
+        echo("Preflop Bucket Decoding:")
+        echo("=" .repeat(50))
+
+        for (bucketStr in buckets) {
+            try {
+                val bucketId = bucketStr.toInt()
+                val hand = com.nlhsolver.poker.PreflopBuckets.getHand(bucketId)
+                echo("Bucket $bucketId → ${hand.notation}")
+            } catch (e: IllegalArgumentException) {
+                echo("Bucket $bucketStr → ERROR: ${e.message}")
+            } catch (e: NumberFormatException) {
+                echo("Bucket $bucketStr → ERROR: Not a valid number")
+            }
         }
     }
 }
