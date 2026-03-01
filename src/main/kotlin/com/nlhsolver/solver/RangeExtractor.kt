@@ -1,10 +1,13 @@
 package com.nlhsolver.solver
 
+import com.nlhsolver.core.StrategyProfile as CoreStrategyProfile
 import com.nlhsolver.poker.PreflopBuckets
 import com.nlhsolver.poker.Position
+import com.nlhsolver.storage.StrategyRepository
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.Instant
+import java.util.UUID
 
 /**
  * Extracts ranges from solved strategies (T134, T137, T138).
@@ -33,37 +36,77 @@ class RangeExtractor {
      * Identifies the preflop decision point where BTN acts first and extracts
      * the action frequencies for all 169 canonical hands.
      *
-     * @param blueprintId Blueprint ID this range comes from
-     * @param strategy Solved strategy from blueprint
+     * @param strategyId Strategy UUID
      * @param config Blueprint configuration
+     * @param repository Strategy repository to load data
      * @return BlueprintRange with BTN opening frequencies
      */
     fun extractBTNOpeningRange(
-        blueprintId: String,
-        strategy: StrategyProfile,
-        config: BlueprintConfiguration
+        strategyId: UUID,
+        config: BlueprintConfiguration,
+        repository: StrategyRepository = StrategyRepository()
     ): BlueprintRange {
-        // TODO: Implement actual strategy traversal to find BTN opening decision point
-        // For now, return a placeholder range
-        val handFrequencies = mutableMapOf<String, ActionFrequencies>()
+        // Load the full strategy data
+        val coreStrategy = repository.loadStrategyData(strategyId)
+            ?: throw IllegalArgumentException("Strategy data not found for $strategyId")
 
-        // Extract frequencies for all 169 canonical hands
-        for (hand in PreflopBuckets.allHands) {
-            // TODO: Look up actual frequencies from strategy
-            // Placeholder: tight opening range
-            val freqs = when {
-                hand.notation in listOf("AA", "KK", "QQ", "JJ", "AKs", "AKo") ->
-                    ActionFrequencies(raise = 1.0)  // Always raise premium hands
-                hand.notation in listOf("TT", "99", "AQs", "AJs") ->
-                    ActionFrequencies(raise = 0.8, fold = 0.2)  // Mostly raise
-                else ->
-                    ActionFrequencies(fold = 1.0)  // Fold everything else (placeholder)
+        // Find all BTN (p1) preflop opening info sets (empty history, pot=1.5)
+        // Format: p1:bucket=XXX:street=PREFLOP:board=:pot=1.5:history=
+        val openingInfoSets = coreStrategy.getAllInfoSetKeys()
+            .filter { it.startsWith("p1:") && it.contains("street=PREFLOP") && it.endsWith("history=") }
+
+        // Extract bucket number from each info set and get strategy
+        val bucketStrategies = mutableMapOf<Int, DoubleArray>()
+
+        for (infoSetKey in openingInfoSets) {
+            // Parse bucket number from key like "p1:bucket=165:..."
+            val bucketMatch = Regex("bucket=(\\d+)").find(infoSetKey)
+            val bucket = bucketMatch?.groupValues?.get(1)?.toInt() ?: continue
+
+            // Get the info set strategy
+            // Note: We need to know the number of actions. For preflop opening, typically: fold, call, raise
+            // But BTN can't fold preflop (already posted SB), so likely: check/limp, raise (2 actions)
+            // Or could be: limp, raise-small, raise-medium, raise-large (multiple raise sizes)
+            // For now, assume 2-4 actions and try to get the strategy
+            val infoSet = coreStrategy.getAllInfoSets().find { it.infoSet == infoSetKey }
+            if (infoSet != null) {
+                bucketStrategies[bucket] = infoSet.getAverageStrategy()
             }
-            handFrequencies[hand.notation] = freqs
+        }
+
+        // Map buckets to canonical hands using PreflopBuckets
+        val handFrequencies = mutableMapOf<String, ActionFrequencies>()
+        val bucketingScheme = PreflopBuckets.getBucketingScheme(config.preflopBuckets)
+
+        for (hand in PreflopBuckets.allHands) {
+            val bucket = bucketingScheme.getBucket(hand)
+            val strategy = bucketStrategies[bucket]
+
+            if (strategy != null) {
+                // Map strategy array to ActionFrequencies
+                // Assuming actions are [check/limp, raise] or [fold, call, raise]
+                // For BTN preflop, likely [check, raise] since fold isn't an option
+                val freqs = when (strategy.size) {
+                    2 -> ActionFrequencies(
+                        check = strategy[0],  // limp/check
+                        raise = strategy[1]   // raise
+                    )
+                    3 -> ActionFrequencies(
+                        fold = strategy[0],
+                        call = strategy[1],
+                        raise = strategy[2]
+                    )
+                    else -> ActionFrequencies(fold = 1.0)  // Default to fold if unknown format
+                }
+                handFrequencies[hand.notation] = freqs
+            } else {
+                // Bucket not in solved strategy (not encountered in limited matchups)
+                handFrequencies[hand.notation] = ActionFrequencies(fold = 1.0)
+            }
         }
 
         return BlueprintRange(
-            blueprintId = blueprintId,
+            blueprintId = config.blueprintId.toString(),
             position = Position.BTN,
             actionPoint = "Preflop Opening",
             handFrequencies = handFrequencies,

@@ -31,7 +31,8 @@ class StrategyCommand : CliktCommand(
             StrategyQueryCommand(),
             StrategyHandCommand(),
             StrategyRangeCommand(),
-            StrategyInspectCommand()
+            StrategyInspectCommand(),
+            StrategyExtractRangeCommand()
         )
     }
 
@@ -494,6 +495,56 @@ class StrategyInspectCommand : CliktCommand(
             echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
         } catch (e: Exception) {
             echo(OutputFormatter.formatError(e.message ?: "Failed to inspect strategy"))
+        }
+    }
+}
+
+/**
+ * Extract blueprint range from strategy.
+ */
+class StrategyExtractRangeCommand : CliktCommand(
+    name = "extract-range",
+    help = "Extract BTN opening range from a blueprint strategy"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val blueprintId by argument(help = "Blueprint ID")
+    private val output by option("--output", "-o", help = "Output file (default: stdout)")
+
+    override fun run() {
+        val repository = com.nlhsolver.storage.StrategyRepository()
+        val blueprintRepo = com.nlhsolver.storage.BlueprintRepository()
+        val extractor = com.nlhsolver.solver.RangeExtractor()
+
+        try {
+            val id = UUID.fromString(strategyId)
+            val bpId = UUID.fromString(blueprintId)
+
+            // Load blueprint config
+            val config = blueprintRepo.findConfiguration(bpId)
+                ?: throw IllegalArgumentException("Blueprint $blueprintId not found")
+
+            echo("Extracting BTN opening range...")
+            echo("  Strategy: $strategyId")
+            echo("  Blueprint: ${config.scenarioName}")
+            echo()
+
+            // Extract range
+            val range = extractor.extractBTNOpeningRange(id, config, repository)
+
+            // Output as text
+            val text = extractor.exportToText(range)
+
+            if (output != null) {
+                java.io.File(output!!).writeText(text)
+                echo("✓ Range exported to: $output")
+            } else {
+                echo(text)
+            }
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Failed to extract range"))
+            e.printStackTrace()
         }
     }
 }
