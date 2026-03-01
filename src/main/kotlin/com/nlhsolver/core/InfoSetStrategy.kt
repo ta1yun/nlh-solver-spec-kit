@@ -209,6 +209,11 @@ class StrategyProfile {
     fun getAllInfoSets(): Collection<InfoSetStrategy> = infoSets.values
 
     /**
+     * Get all information set keys.
+     */
+    fun getAllInfoSetKeys(): Set<String> = infoSets.keys
+
+    /**
      * Get the number of information sets in this profile.
      */
     fun size(): Int = infoSets.size

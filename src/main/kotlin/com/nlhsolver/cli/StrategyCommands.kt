@@ -30,7 +30,8 @@ class StrategyCommand : CliktCommand(
             StrategyShowCommand(),
             StrategyQueryCommand(),
             StrategyHandCommand(),
-            StrategyRangeCommand()
+            StrategyRangeCommand(),
+            StrategyInspectCommand()
         )
     }
 
@@ -432,5 +433,67 @@ class StrategyRangeCommand : CliktCommand(
 
     private fun formatBoard(cards: List<Card>): String {
         return cards.joinToString("") { "${it.rank.symbol}${it.suit.symbol}" }
+    }
+}
+
+/**
+ * Inspect strategy info sets.
+ */
+class StrategyInspectCommand : CliktCommand(
+    name = "inspect",
+    help = "Inspect information sets in a strategy"
+) {
+    private val strategyId by argument(help = "Strategy ID")
+    private val limit by option("--limit", "-n", help = "Limit number of info sets shown").convert { it.toInt() }.default(50)
+    private val filter by option("--filter", "-f", help = "Filter info sets by prefix (e.g., 'PREFLOP')").default("")
+
+    override fun run() {
+        val repository = StrategyRepository()
+
+        try {
+            val id = UUID.fromString(strategyId)
+            val coreStrategy = repository.loadStrategyData(id)
+                ?: throw IllegalArgumentException("Strategy data not found for $strategyId")
+
+            echo("Strategy ID: $strategyId")
+            echo("="
+
+.repeat(80))
+            echo()
+
+            // Get all info sets
+            val allInfoSets = coreStrategy.getAllInfoSetKeys().sorted()
+            val filteredInfoSets = if (filter.isNotEmpty()) {
+                allInfoSets.filter { it.contains(filter, ignoreCase = true) }
+            } else {
+                allInfoSets
+            }
+
+            echo("Total info sets: ${allInfoSets.size}")
+            if (filter.isNotEmpty()) {
+                echo("Filtered (containing '$filter'): ${filteredInfoSets.size}")
+            }
+            echo()
+
+            // Show sample of info sets
+            val displayCount = minOf(limit, filteredInfoSets.size)
+            echo("Showing first $displayCount info sets:")
+            echo("-".repeat(80))
+
+            filteredInfoSets.take(displayCount).forEach { infoSet ->
+                echo(infoSet)
+            }
+
+            if (filteredInfoSets.size > limit) {
+                echo()
+                echo("... and ${filteredInfoSets.size - limit} more")
+                echo()
+                echo("Use --limit to show more, or --filter to narrow down")
+            }
+        } catch (e: IllegalArgumentException) {
+            echo(OutputFormatter.formatError("Invalid input: ${e.message}"))
+        } catch (e: Exception) {
+            echo(OutputFormatter.formatError(e.message ?: "Failed to inspect strategy"))
+        }
     }
 }
