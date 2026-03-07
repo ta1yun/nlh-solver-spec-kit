@@ -111,7 +111,25 @@ class SolveOrchestrator(
             val normalizedWeight: Double
         )
 
-        val weightedStates = allMatchups.map { matchup ->
+        logger.info("Building game states for all matchups", "count" to allMatchups.size)
+        val startTime = System.currentTimeMillis()
+
+        val weightedStates = allMatchups.mapIndexed { index, matchup ->
+            // Log progress every 10% or every 100 matchups (whichever is smaller)
+            val logInterval = minOf(100, maxOf(1, allMatchups.size / 10))
+            if (index > 0 && index % logInterval == 0) {
+                val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+                val rate = index / elapsed
+                val remaining = (allMatchups.size - index) / rate
+                logger.info("Game state building progress",
+                    "completed" to index,
+                    "total" to allMatchups.size,
+                    "percent" to String.format("%.1f%%", (index * 100.0) / allMatchups.size),
+                    "elapsed" to String.format("%.1fs", elapsed),
+                    "remaining" to String.format("%.1fs", remaining)
+                )
+            }
+
             WeightedRootState(
                 state = com.nlhsolver.core.StartingHandSampler.createGameState(
                     street = configuration.startingStreet,
@@ -131,6 +149,12 @@ class SolveOrchestrator(
                 normalizedWeight = matchup.weight / totalWeight
             )
         }
+
+        val totalTime = (System.currentTimeMillis() - startTime) / 1000.0
+        logger.info("Completed building all game states",
+            "count" to allMatchups.size,
+            "time" to String.format("%.1fs", totalTime)
+        )
 
         logger.info("Starting unified range-based solve",
             "street" to configuration.startingStreet.name,
