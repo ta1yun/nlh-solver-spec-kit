@@ -557,10 +557,10 @@ class StrategyDecodeBucketCommand : CliktCommand(
     name = "decode-bucket",
     help = "Decode preflop bucket IDs to canonical hand notation"
 ) {
-    private val buckets by argument(help = "Bucket IDs (space-separated)").multiple()
+    private val bucketIds by argument(name = "BUCKET_ID", help = "Bucket IDs").multiple(required = false)
 
     override fun run() {
-        if (buckets.isEmpty()) {
+        if (bucketIds.isEmpty()) {
             echo("Usage: strategy decode-bucket <bucket-id> [<bucket-id> ...]")
             echo("Example: strategy decode-bucket 165 134 143")
             return
@@ -569,7 +569,7 @@ class StrategyDecodeBucketCommand : CliktCommand(
         echo("Preflop Bucket Decoding:")
         echo("=" .repeat(50))
 
-        for (bucketStr in buckets) {
+        for (bucketStr in bucketIds) {
             try {
                 val bucketId = bucketStr.toInt()
                 val hand = com.nlhsolver.poker.PreflopBuckets.getHand(bucketId)
