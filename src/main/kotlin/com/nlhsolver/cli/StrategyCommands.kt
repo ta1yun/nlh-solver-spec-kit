@@ -557,12 +557,12 @@ class StrategyDecodeBucketCommand : CliktCommand(
     name = "decode-bucket",
     help = "Decode preflop bucket IDs to canonical hand notation"
 ) {
-    private val bucketIds by argument(name = "BUCKET_ID", help = "Bucket IDs").multiple(required = false)
+    private val bucketIds by option("--buckets", "-b", help = "Bucket IDs (comma-separated)").split(",").default(emptyList())
 
     override fun run() {
         if (bucketIds.isEmpty()) {
-            echo("Usage: strategy decode-bucket <bucket-id> [<bucket-id> ...]")
-            echo("Example: strategy decode-bucket 165 134 143")
+            echo("Usage: strategy decode-bucket --buckets <id1>,<id2>,...")
+            echo("Example: strategy decode-bucket --buckets 165,134,143")
             return
         }
 
