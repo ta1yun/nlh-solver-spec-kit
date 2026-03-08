@@ -10,6 +10,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Orchestrates the end-to-end solve process (T047-T048, T117).
@@ -180,13 +182,32 @@ class SolveOrchestrator(
         var convergenceStatus: ConvergenceStatus = ConvergenceStatus.NotConverged
 
         // Main CFR iteration loop
+        val iterationStartTime = System.currentTimeMillis()
         while (!converged) {
             currentIteration++
 
-            // Run one CFR iteration on all starting hands with combo weighting
+            // Run one CFR iteration on all starting hands with PARALLEL training
             // Each matchup is weighted by its combo frequency
-            for (weightedState in weightedStates) {
-                cfrSolver.train(weightedState.state, iterations = 1)
+            // Limit concurrency to 12 cores (leave headroom for GC and memory)
+            runBlocking {
+                weightedStates.chunked(12).forEach { batch ->
+                    batch.map { weightedState ->
+                        async(Dispatchers.Default) {
+                            cfrSolver.train(weightedState.state, iterations = 1)
+                        }
+                    }.awaitAll()
+                }
+            }
+
+            // Log progress every 10 iterations (not 1000)
+            if (currentIteration % 10 == 0) {
+                val elapsed = (System.currentTimeMillis() - iterationStartTime) / 1000.0
+                val rate = currentIteration / elapsed
+                logger.info("CFR iteration progress",
+                    "iteration" to currentIteration,
+                    "elapsed" to String.format("%.1fs", elapsed),
+                    "rate" to String.format("%.1f iter/s", rate)
+                )
             }
 
             // Check convergence (this is expensive, so only done at intervals)
@@ -223,8 +244,8 @@ class SolveOrchestrator(
                 exploitability = avgExploitability
             )
 
-            // Update progress callback if provided
-            if (currentIteration % 1000 == 0) {
+            // Update progress callback if provided (every 100 iterations)
+            if (currentIteration % 100 == 0) {
                 val iterationSpeed = convergenceMonitor.getIterationSpeed(currentIteration)
                 val estimatedTimeRemaining = convergenceMonitor.getEstimatedTimeRemaining(iterationSpeed)
 

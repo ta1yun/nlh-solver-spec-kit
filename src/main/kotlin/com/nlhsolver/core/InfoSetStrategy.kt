@@ -18,17 +18,20 @@ class InfoSetStrategy(
      * Cumulative regrets for each action.
      * Updated during CFR iterations based on counterfactual values.
      */
+    @Volatile
     private val cumulativeRegret = DoubleArray(numActions)
 
     /**
      * Cumulative strategy weighted by reach probability.
      * Used to compute the average strategy (Nash equilibrium approximation).
      */
+    @Volatile
     private val cumulativeStrategy = DoubleArray(numActions)
 
     /**
      * Number of times this information set has been visited.
      */
+    @Volatile
     private var visitCount = 0L
 
     /**
@@ -40,6 +43,7 @@ class InfoSetStrategy(
      *
      * @return Array of action probabilities (sum to 1.0)
      */
+    @Synchronized
     fun getStrategy(reachProbability: Double = 1.0): DoubleArray {
         val strategy = DoubleArray(numActions)
         var normalizingSum = 0.0
@@ -100,6 +104,7 @@ class InfoSetStrategy(
      * @param nodeValue Expected value of the current strategy
      * @param opponentReachProb Probability that opponent reaches this state
      */
+    @Synchronized
     fun updateRegrets(
         actionValues: DoubleArray,
         nodeValue: Double,
@@ -192,7 +197,7 @@ class InfoSetStrategy(
  * Stores all information set strategies for a game.
  */
 class StrategyProfile {
-    private val infoSets = mutableMapOf<String, InfoSetStrategy>()
+    private val infoSets = java.util.concurrent.ConcurrentHashMap<String, InfoSetStrategy>()
 
     /**
      * Get or create an InfoSetStrategy for a given information set.
