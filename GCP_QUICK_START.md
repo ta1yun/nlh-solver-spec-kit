@@ -256,6 +256,98 @@ cd deploy/gcp
 ./deploy.sh delete nlh-solver
 ```
 
+## Tips & Best Practices
+
+### Testing Before Full Solve
+
+Test with limited matchups first (faster, cheaper):
+
+```bash
+# Test with 10 hands (~5 min)
+export NLH_MAX_MATCHUPS=10
+./run-blueprint-solve.sh start
+
+# Or test with 100 hands (~30 min)
+export NLH_MAX_MATCHUPS=100
+./run-blueprint-solve.sh start
+
+# Full solve with all 1,326 hands (2-4 hours)
+unset NLH_MAX_MATCHUPS
+./run-blueprint-solve.sh start
+```
+
+### Monitoring Solve Progress
+
+Check if solve is working (not hung):
+
+```bash
+# Check CPU usage (should be 90-100% during solve)
+top -bn1 | grep java
+
+# Monitor logs in real-time
+./run-blueprint-solve.sh logs
+
+# Check tmux session status
+./run-blueprint-solve.sh status
+```
+
+**Initialization phase:** Silent for 5-20 minutes while building game states. Watch CPU - if it's at 100%, it's working!
+
+### Inspecting Solved Strategies
+
+```bash
+# List all strategies
+./gradlew run --args="strategy list"
+
+# Inspect info sets in a strategy
+./gradlew run --args="strategy inspect <strategy-id>"
+
+# Decode preflop bucket IDs to hands
+./gradlew run --args="strategy decode-bucket --buckets 165,134,143"
+
+# Extract BTN opening range
+./gradlew run --args="strategy extract-range <strategy-id> <blueprint-id>"
+```
+
+### Building on Instance
+
+```bash
+# Build without running tests (much faster)
+./gradlew build -x test
+
+# If build hangs, check memory
+free -h
+
+# If Gradle daemon issues
+./gradlew --stop
+```
+
+### Common Issues
+
+**Build fails with Java version error:**
+```bash
+# Check Java version (needs 21)
+java -version
+
+# Install if missing (already in startup script)
+sudo apt-get install -y openjdk-21-jdk
+```
+
+**Gradle wrapper missing:**
+```bash
+# Regenerate wrapper
+gradle wrapper --gradle-version 8.5
+```
+
+**Instance auto-deleted:**
+- Instances auto-delete after 3 hours (hard cap)
+- Data is preserved on disk (auto-delete=no)
+- Recreate instance and attach old disk to recover results
+
+**Strategy file exists but no ranges:**
+- For test solves (NLH_MAX_MATCHUPS < 1326), most hands won't be solved
+- Run full solve to get complete ranges
+
 ## Next Steps
 
 See `CLOUD_DEPLOYMENT.md` for advanced options (spot instances, monitoring, etc.)
