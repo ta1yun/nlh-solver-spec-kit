@@ -191,15 +191,13 @@ class SolveOrchestrator(
 
             // Run one CFR iteration on all starting hands with PARALLEL training
             // Each matchup is weighted by its combo frequency
-            // Limit concurrency to 12 cores (leave headroom for GC and memory)
+            // Dispatchers.Default automatically limits to available CPU cores
             runBlocking {
-                weightedStates.chunked(12).forEach { batch ->
-                    batch.map { weightedState ->
-                        async(Dispatchers.Default) {
-                            cfrSolver.train(weightedState.state, iterations = 1)
-                        }
-                    }.awaitAll()
-                }
+                weightedStates.map { weightedState ->
+                    async(Dispatchers.Default) {
+                        cfrSolver.train(weightedState.state, iterations = 1)
+                    }
+                }.awaitAll()
             }
 
             // Log progress every 10 iterations (not 1000)

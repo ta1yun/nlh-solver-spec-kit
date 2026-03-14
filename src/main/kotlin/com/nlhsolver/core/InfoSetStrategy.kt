@@ -15,22 +15,28 @@ class InfoSetStrategy(
     val numActions: Int
 ) {
     /**
+     * Per-info-set lock for fine-grained synchronization.
+     * Allows different info sets to be updated in parallel.
+     */
+    private val lock = Any()
+
+    /**
      * Cumulative regrets for each action.
      * Updated during CFR iterations based on counterfactual values.
-     * Thread-safe via synchronized methods.
+     * Thread-safe via per-info-set lock.
      */
     private val cumulativeRegret = DoubleArray(numActions)
 
     /**
      * Cumulative strategy weighted by reach probability.
      * Used to compute the average strategy (Nash equilibrium approximation).
-     * Thread-safe via synchronized methods.
+     * Thread-safe via per-info-set lock.
      */
     private val cumulativeStrategy = DoubleArray(numActions)
 
     /**
      * Number of times this information set has been visited.
-     * Thread-safe via synchronized methods.
+     * Thread-safe via per-info-set lock.
      */
     private var visitCount = 0L
 
@@ -43,8 +49,7 @@ class InfoSetStrategy(
      *
      * @return Array of action probabilities (sum to 1.0)
      */
-    @Synchronized
-    fun getStrategy(reachProbability: Double = 1.0): DoubleArray {
+    fun getStrategy(reachProbability: Double = 1.0): DoubleArray = synchronized(lock) {
         val strategy = DoubleArray(numActions)
         var normalizingSum = 0.0
 
@@ -104,12 +109,11 @@ class InfoSetStrategy(
      * @param nodeValue Expected value of the current strategy
      * @param opponentReachProb Probability that opponent reaches this state
      */
-    @Synchronized
     fun updateRegrets(
         actionValues: DoubleArray,
         nodeValue: Double,
         opponentReachProb: Double
-    ) {
+    ) = synchronized(lock) {
         require(actionValues.size == numActions) {
             "Action values size ${actionValues.size} must match numActions $numActions"
         }
