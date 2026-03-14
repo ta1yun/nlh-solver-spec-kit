@@ -477,13 +477,23 @@ class StrategyInspectCommand : CliktCommand(
             }
             echo()
 
-            // Show sample of info sets
+            // Show sample of info sets with strategies
             val displayCount = minOf(limit, filteredInfoSets.size)
             echo("Showing first $displayCount info sets:")
             echo("-".repeat(80))
 
-            filteredInfoSets.take(displayCount).forEach { infoSet ->
-                echo(infoSet)
+            filteredInfoSets.take(displayCount).forEach { infoSetKey ->
+                val infoSet = coreStrategy.getAllInfoSets().find { it.infoSet == infoSetKey }
+                if (infoSet != null) {
+                    echo(infoSetKey)
+                    val avgStrategy = infoSet.getAverageStrategy()
+                    avgStrategy.forEachIndexed { index, prob ->
+                        echo("  Action $index: ${String.format("%.4f", prob)}")
+                    }
+                    echo()
+                } else {
+                    echo(infoSetKey)
+                }
             }
 
             if (filteredInfoSets.size > limit) {
