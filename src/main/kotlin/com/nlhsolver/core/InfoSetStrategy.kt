@@ -17,21 +17,21 @@ class InfoSetStrategy(
     /**
      * Cumulative regrets for each action.
      * Updated during CFR iterations based on counterfactual values.
+     * Thread-safe via synchronized methods.
      */
-    @Volatile
     private val cumulativeRegret = DoubleArray(numActions)
 
     /**
      * Cumulative strategy weighted by reach probability.
      * Used to compute the average strategy (Nash equilibrium approximation).
+     * Thread-safe via synchronized methods.
      */
-    @Volatile
     private val cumulativeStrategy = DoubleArray(numActions)
 
     /**
      * Number of times this information set has been visited.
+     * Thread-safe via synchronized methods.
      */
-    @Volatile
     private var visitCount = 0L
 
     /**
