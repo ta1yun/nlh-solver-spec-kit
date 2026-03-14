@@ -227,15 +227,11 @@ class SolveOrchestrator(
             // Normalize exploitability by pot size to get a percentage (e.g., 3.7 chips / 20 pot = 0.185 = 18.5%)
             val avgExploitability = avgExploitabilityChips / configuration.pot
 
-            // Debug: Log exploitability on first check
-            if (currentIteration == configuration.convergenceCriteria.evaluationFrequency) {
-                logger.debug("First exploitability check",
-                    "iteration" to currentIteration,
-                    "exploitability" to String.format("%.4f", avgExploitability),
-                    "exploitabilityPct" to String.format("%.2f%%", avgExploitability * 100),
-                    "matchups" to weightedStates.size
-                )
-            }
+            // Log exploitability check at INFO level for visibility
+            val exploitPct = avgExploitability * 100
+            val targetPct = configuration.convergenceCriteria.targetExploitability * 100
+            val msg = "Convergence check [iteration=$currentIteration, exploitability=${String.format("%.2f%%", exploitPct)}, target=${String.format("%.2f%%", targetPct)}]"
+            logger.info(msg)
 
             // Use first root state for convergence check, but override exploitability with average
             convergenceStatus = convergenceMonitor.checkConvergenceWithExploitability(

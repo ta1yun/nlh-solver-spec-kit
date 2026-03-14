@@ -82,8 +82,8 @@ data class BlueprintConfiguration(
             preflopBuckets = preflopBuckets,
             convergenceCriteria = ConvergenceCriteria(
                 targetExploitability = 1.0,  // 1% exploitability (T132)
-                maxIterations = 10_000_000,   // Higher for full tree
-                evaluationFrequency = 50_000  // Less frequent for speed
+                maxIterations = 1_000_000,    // 1M iterations (plenty for convergence)
+                evaluationFrequency = 5_000   // Check every 5k iterations (~10 min at 8.5 iter/s)
             ),
             betSizingScheme = betSizingScheme,
             name = scenarioName
