@@ -2,6 +2,9 @@ package com.nlhsolver.solver
 
 import com.nlhsolver.common.MemoryGuard
 import com.nlhsolver.common.logger
+import com.nlhsolver.common.info
+import com.nlhsolver.common.debug
+import com.nlhsolver.common.warn
 import com.nlhsolver.common.logSolveStart
 import com.nlhsolver.common.logSolveComplete
 import com.nlhsolver.core.*
