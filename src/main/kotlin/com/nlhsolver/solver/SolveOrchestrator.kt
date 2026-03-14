@@ -210,34 +210,37 @@ class SolveOrchestrator(
             }
 
             // Check convergence (this is expensive, so only done at intervals)
-            // Calculate weighted average exploitability across all matchups
-            var totalWeightedExploitability = 0.0
-            var weightSum = 0.0
+            if (currentIteration % configuration.convergenceCriteria.evaluationFrequency == 0) {
+                // Calculate weighted average exploitability across all matchups
+                var totalWeightedExploitability = 0.0
+                var weightSum = 0.0
 
-            for (weightedState in weightedStates) {
-                val exploitability = exploitabilityCalculator.calculateExploitability(
-                    weightedState.state,
-                    cfrSolver.getStrategyProfile()
+                for (weightedState in weightedStates) {
+                    val exploitability = exploitabilityCalculator.calculateExploitability(
+                        weightedState.state,
+                        cfrSolver.getStrategyProfile()
+                    )
+                    totalWeightedExploitability += exploitability * weightedState.normalizedWeight
+                    weightSum += weightedState.normalizedWeight
+                }
+
+                val avgExploitabilityChips = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
+                // Normalize exploitability by pot size to get a percentage (e.g., 3.7 chips / 20 pot = 0.185 = 18.5%)
+                val avgExploitability = avgExploitabilityChips / configuration.pot
+
+                // Log exploitability check at INFO level for visibility
+                val exploitPct = avgExploitability * 100
+                val targetPct = configuration.convergenceCriteria.targetExploitability * 100
+                val msg = "Convergence check [iteration=$currentIteration, exploitability=${String.format("%.2f%%", exploitPct)}, target=${String.format("%.2f%%", targetPct)}]"
+                logger.info(msg)
+
+                // Check convergence with calculated exploitability
+                convergenceStatus = convergenceMonitor.checkConvergenceWithExploitability(
+                    currentIteration = currentIteration,
+                    exploitability = avgExploitability
                 )
-                totalWeightedExploitability += exploitability * weightedState.normalizedWeight
-                weightSum += weightedState.normalizedWeight
             }
-
-            val avgExploitabilityChips = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
-            // Normalize exploitability by pot size to get a percentage (e.g., 3.7 chips / 20 pot = 0.185 = 18.5%)
-            val avgExploitability = avgExploitabilityChips / configuration.pot
-
-            // Log exploitability check at INFO level for visibility
-            val exploitPct = avgExploitability * 100
-            val targetPct = configuration.convergenceCriteria.targetExploitability * 100
-            val msg = "Convergence check [iteration=$currentIteration, exploitability=${String.format("%.2f%%", exploitPct)}, target=${String.format("%.2f%%", targetPct)}]"
-            logger.info(msg)
-
-            // Use first root state for convergence check, but override exploitability with average
-            convergenceStatus = convergenceMonitor.checkConvergenceWithExploitability(
-                currentIteration = currentIteration,
-                exploitability = avgExploitability
-            )
+            // Note: convergenceStatus carries forward from previous check if we skip this iteration
 
             // Update progress callback if provided (every 100 iterations)
             if (currentIteration % 100 == 0) {

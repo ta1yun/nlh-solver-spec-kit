@@ -81,7 +81,7 @@ data class BlueprintConfiguration(
             stackSizes = stackSizes,
             preflopBuckets = preflopBuckets,
             convergenceCriteria = ConvergenceCriteria(
-                targetExploitability = 1.0,  // 1% exploitability (T132)
+                targetExploitability = 0.01,  // 1% exploitability (0.01 = 1% of pot) (T132)
                 maxIterations = 1_000_000,    // 1M iterations (plenty for convergence)
                 evaluationFrequency = 5_000   // Check every 5k iterations (~10 min at 8.5 iter/s)
             ),
