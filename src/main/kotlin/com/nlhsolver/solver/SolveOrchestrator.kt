@@ -79,7 +79,7 @@ class SolveOrchestrator(
 
         // Phase 2.7 (T241): Board canonicalization for suit isomorphism
         // Use canonical board to reduce equivalent boards to a single representation
-        val (effectiveConfig, boardCanonicalizer) = if (configuration.board.isNotEmpty()) {
+        val (effectiveConfig, _) = if (configuration.board.isNotEmpty()) {
             configuration.withCanonicalBoard()
         } else {
             Pair(configuration, com.nlhsolver.poker.BoardCanonicalizer.identity())
