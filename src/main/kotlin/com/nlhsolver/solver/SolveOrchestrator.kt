@@ -204,11 +204,9 @@ class SolveOrchestrator(
             if (currentIteration % 10 == 0) {
                 val elapsed = (System.currentTimeMillis() - iterationStartTime) / 1000.0
                 val rate = currentIteration / elapsed
-                logger.info("CFR iteration progress",
-                    "iteration" to currentIteration,
-                    "elapsed" to String.format("%.1fs", elapsed),
-                    "rate" to String.format("%.1f iter/s", rate)
-                )
+                // Build structured log message manually to avoid method shadowing
+                val msg = "CFR iteration progress [iteration=$currentIteration, elapsed=${String.format("%.1fs", elapsed)}, rate=${String.format("%.1f iter/s", rate)}]"
+                logger.info(msg)
             }
 
             // Check convergence (this is expensive, so only done at intervals)
