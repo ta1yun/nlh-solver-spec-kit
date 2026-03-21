@@ -189,15 +189,25 @@ class SolveOrchestrator(
         while (!converged) {
             currentIteration++
 
-            // Run one CFR iteration on all starting hands with PARALLEL training
-            // Each matchup is weighted by its combo frequency
-            // Dispatchers.Default automatically limits to available CPU cores
-            runBlocking {
-                weightedStates.map { weightedState ->
-                    async(Dispatchers.Default) {
-                        cfrSolver.train(weightedState.state, iterations = 1)
-                    }
-                }.awaitAll()
+            // Run one CFR iteration on all starting hands
+            // Use SINGLE_THREADED env var to disable parallelization for debugging
+            val useSingleThreaded = System.getenv("NLH_SINGLE_THREADED")?.toBoolean() ?: false
+
+            if (useSingleThreaded) {
+                // SINGLE-THREADED: Sequential training (for debugging)
+                for (weightedState in weightedStates) {
+                    cfrSolver.train(weightedState.state, iterations = 1)
+                }
+            } else {
+                // PARALLEL: Each matchup trained concurrently
+                // Dispatchers.Default automatically limits to available CPU cores
+                runBlocking {
+                    weightedStates.map { weightedState ->
+                        async(Dispatchers.Default) {
+                            cfrSolver.train(weightedState.state, iterations = 1)
+                        }
+                    }.awaitAll()
+                }
             }
 
             // Log progress every 10 iterations (not 1000)
