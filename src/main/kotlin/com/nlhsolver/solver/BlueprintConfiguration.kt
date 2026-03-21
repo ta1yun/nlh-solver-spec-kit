@@ -82,7 +82,7 @@ data class BlueprintConfiguration(
             preflopBuckets = preflopBuckets,
             convergenceCriteria = ConvergenceCriteria(
                 targetExploitability = 0.01,  // 1% exploitability (0.01 = 1% of pot) (T132)
-                maxIterations = 10_000,       // 10k iterations for validation test
+                maxIterations = 100_000,      // 100k iterations (~46 hours at 0.6 iter/s, fits in 48h timeout)
                 evaluationFrequency = 1_000   // Check every 1k iterations (more frequent monitoring)
             ),
             betSizingScheme = betSizingScheme,
