@@ -134,8 +134,7 @@ class RangeExtractionTest : FunSpec({
             )
 
             val range = extractor.extractBTNOpeningRange(
-                blueprintId = config.blueprintId.toString(),
-                strategy = strategy,
+                strategyId = strategy.strategyId,
                 config = config
             )
 

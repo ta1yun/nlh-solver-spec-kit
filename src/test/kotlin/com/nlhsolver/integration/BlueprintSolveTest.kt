@@ -112,8 +112,7 @@ class BlueprintSolveTest : FunSpec({
             // Extract BTN opening range
             val extractor = RangeExtractor()
             val btnRange = extractor.extractBTNOpeningRange(
-                blueprintId = config.blueprintId.toString(),
-                strategy = strategy,
+                strategyId = strategy.strategyId,
                 config = config
             )
 
