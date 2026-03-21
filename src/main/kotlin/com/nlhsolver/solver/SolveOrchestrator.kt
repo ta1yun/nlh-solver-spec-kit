@@ -225,13 +225,19 @@ class SolveOrchestrator(
                 var totalWeightedExploitability = 0.0
                 var weightSum = 0.0
 
-                for (weightedState in weightedStates) {
+                val debugExploit = System.getenv("NLH_DEBUG_EXPLOIT")?.toBoolean() ?: false
+
+                for ((index, weightedState) in weightedStates.withIndex()) {
                     val exploitability = exploitabilityCalculator.calculateExploitability(
                         weightedState.state,
                         cfrSolver.getStrategyProfile()
                     )
                     totalWeightedExploitability += exploitability * weightedState.normalizedWeight
                     weightSum += weightedState.normalizedWeight
+
+                    if (debugExploit && index < 3) {
+                        logger.info("Matchup $index: exploitability=$exploitability, weight=${weightedState.normalizedWeight}")
+                    }
                 }
 
                 val avgExploitabilityChips = if (weightSum > 0) totalWeightedExploitability / weightSum else 0.0
