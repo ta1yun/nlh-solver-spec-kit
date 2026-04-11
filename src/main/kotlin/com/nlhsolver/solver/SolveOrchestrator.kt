@@ -189,26 +189,11 @@ class SolveOrchestrator(
         while (!converged) {
             currentIteration++
 
-            // Run one CFR iteration on all starting hands
-            // Use SINGLE_THREADED env var to disable parallelization for debugging
-            val useSingleThreaded = System.getenv("NLH_SINGLE_THREADED")?.toBoolean() ?: false
-
-            if (useSingleThreaded) {
-                // SINGLE-THREADED: Sequential training (for debugging)
-                for (weightedState in weightedStates) {
-                    cfrSolver.train(weightedState.state, iterations = 1)
-                }
-            } else {
-                // PARALLEL: Each matchup trained concurrently
-                // Dispatchers.Default automatically limits to available CPU cores
-                runBlocking {
-                    weightedStates.map { weightedState ->
-                        async(Dispatchers.Default) {
-                            cfrSolver.train(weightedState.state, iterations = 1)
-                        }
-                    }.awaitAll()
-                }
-            }
+            // EXTERNAL SAMPLING MCCFR: Sample ONE matchup per iteration
+            // This prevents strategy conflicts between matchups
+            // Over many iterations, each matchup gets trained proportionally to its probability
+            val sampledState = weightedStates.randomWeighted { it.normalizedWeight }
+            cfrSolver.train(sampledState.state, iterations = 1)
 
             // Log progress every 10 iterations (not 1000)
             if (currentIteration % 10 == 0) {
@@ -374,3 +359,27 @@ data class SolveProgress(
     val iterationSpeed: Double,
     val elapsedSeconds: Long
 )
+
+/**
+ * Weighted random sampling extension for collections.
+ *
+ * Samples one element from the collection with probability proportional to its weight.
+ * Used for External Sampling MCCFR.
+ *
+ * @param weightSelector Function that returns the weight for each element
+ * @return Randomly selected element weighted by the weight function
+ */
+private fun <T> List<T>.randomWeighted(weightSelector: (T) -> Double): T {
+    val totalWeight = this.sumOf { weightSelector(it) }
+    var random = Math.random() * totalWeight
+
+    for (element in this) {
+        random -= weightSelector(element)
+        if (random <= 0) {
+            return element
+        }
+    }
+
+    // Fallback (should never happen unless weights are all zero)
+    return this.last()
+}
