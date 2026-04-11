@@ -85,7 +85,7 @@ protobuf {
 
 // Kotlin compilation settings
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
 }
 
 // Application configuration (T122)
