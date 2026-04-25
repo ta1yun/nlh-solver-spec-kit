@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker Range Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #4ecca3;
+        }
+
+        .subtitle {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .controls {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #999;
+        }
+
+        select, input {
+            background: #0f1620;
+            border: 1px solid #2a3f5f;
+            color: #eee;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        select:hover, input:hover {
+            border-color: #4ecca3;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 30px;
+        }
+
+        .range-grid-container {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 30px;
+        }
+
+        .range-grid {
+            display: grid;
+            gap: 4px;
+            width: fit-content;
+        }
+
+        /* Leduc grid (3x3) */
+        .range-grid.leduc {
+            grid-template-columns: repeat(3, 100px);
+        }
+
+        /* NLH grid (13x13) */
+        .range-grid.nlh {
+            grid-template-columns: repeat(13, 65px);
+        }
+
+        .hand-cell {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .hand-cell:hover {
+            transform: scale(1.05);
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .hand-cell.selected {
+            border-color: #4ecca3;
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.3);
+        }
+
+        .hand-label {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+
+        .leduc .hand-label {
+            font-size: 18px;
+        }
+
+        .hand-freq {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .leduc .hand-freq {
+            font-size: 12px;
+        }
+
+        /* Color coding for actions */
+        .action-fold { background: linear-gradient(135deg, #c0392b 0%, #8e2a1f 100%); }
+        .action-check { background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); }
+        .action-call { background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); }
+        .action-bet { background: linear-gradient(135deg, #e67e22 0%, #d35400 100%); }
+        .action-raise { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); }
+        .action-mixed { background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); }
+
+        .info-panel {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 25px;
+            width: 320px;
+            height: fit-content;
+        }
+
+        .info-panel h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #4ecca3;
+        }
+
+        .hand-detail {
+            margin-bottom: 20px;
+        }
+
+        .hand-name {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .hand-type {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .strategy-bars {
+            margin-top: 20px;
+        }
+
+        .strategy-item {
+            margin-bottom: 12px;
+        }
+
+        .strategy-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .strategy-bar {
+            height: 24px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            background: #0f1620;
+        }
+
+        .strategy-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .legend {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #2a3f5f;
+        }
+
+        .legend h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #999;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .game-state {
+            background: #0f1620;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .game-state-label {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .game-state-value {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #4ecca3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Poker Strategy Range Viewer</h1>
+            <p class="subtitle">Visualize optimal strategies across hand ranges</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Game Type</label>
+                <select id="gameType" onchange="switchGame()">
+                    <option value="leduc">Leduc Hold'em (3x3)</option>
+                    <option value="nlh">No-Limit Hold'em (13x13)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Position</label>
+                <select id="position">
+                    <option value="btn">Button</option>
+                    <option value="co">Cutoff</option>
+                    <option value="mp">Middle Position</option>
+                    <option value="ep">Early Position</option>
+                    <option value="sb">Small Blind</option>
+                    <option value="bb">Big Blind</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Action Facing</label>
+                <select id="facing" onchange="updateRange()">
+                    <option value="open">First to act</option>
+                    <option value="vs-raise">Facing raise</option>
+                    <option value="vs-3bet">Facing 3-bet</option>
+                    <option value="vs-4bet">Facing 4-bet</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Street</label>
+                <select id="street">
+                    <option value="preflop">Pre-flop</option>
+                    <option value="flop">Flop</option>
+                    <option value="turn">Turn</option>
+                    <option value="river">River</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="range-grid-container">
+                <div id="rangeGrid" class="range-grid leduc"></div>
+            </div>
+
+            <div class="info-panel">
+                <h2>Hand Details</h2>
+
+                <div class="game-state">
+                    <div class="game-state-label">Current Situation</div>
+                    <div class="game-state-value" id="gameState">BTN first to act</div>
+                </div>
+
+                <div class="hand-detail">
+                    <div class="hand-name" id="handName">Select a hand</div>
+                    <div class="hand-type" id="handType">Click any cell</div>
+                </div>
+
+                <div class="strategy-bars" id="strategyBars">
+                    <!-- Strategy bars will be inserted here -->
+                </div>
+
+                <div class="legend">
+                    <h3>Action Legend</h3>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="legend-color action-fold"></div>
+                            <span>Fold</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color action-check"></div>
+                            <span>Check</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color action-call"></div>
+                            <span>Call</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color action-bet"></div>
+                            <span>Bet</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color action-raise"></div>
+                            <span>Raise</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color action-mixed"></div>
+                            <span>Mixed</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data structures
+        const leducHands = [
+            { label: 'KK', type: 'Pair' },
+            { label: 'KQ', type: 'Suited' },
+            { label: 'KJ', type: 'Suited' },
+            { label: 'QK', type: 'Offsuit' },
+            { label: 'QQ', type: 'Pair' },
+            { label: 'QJ', type: 'Suited' },
+            { label: 'JK', type: 'Offsuit' },
+            { label: 'JQ', type: 'Offsuit' },
+            { label: 'JJ', type: 'Pair' }
+        ];
+
+        const nlhRanks = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
+        const nlhHands = [];
+
+        // Generate NLH hands (13x13 grid)
+        for (let i = 0; i < 13; i++) {
+            for (let j = 0; j < 13; j++) {
+                const rank1 = nlhRanks[i];
+                const rank2 = nlhRanks[j];
+
+                if (i === j) {
+                    // Pairs on diagonal
+                    nlhHands.push({ label: `${rank1}${rank2}`, type: 'Pair' });
+                } else if (i < j) {
+                    // Suited above diagonal
+                    nlhHands.push({ label: `${rank1}${rank2}s`, type: 'Suited' });
+                } else {
+                    // Offsuit below diagonal
+                    nlhHands.push({ label: `${rank2}${rank1}o`, type: 'Offsuit' });
+                }
+            }
+        }
+
+        // Sample strategy data (would come from your solver)
+        function getStrategy(hand, situation) {
+            // This would query your actual solver data
+            // For now, generating plausible-looking sample data
+            const hash = hand.label.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            const r = (hash * 17) % 100;
+
+            if (situation === 'vs-raise') {
+                // Facing a raise: fold, call, or 3-bet
+                if (hand.label.includes('A') || hand.label.includes('K')) {
+                    return { fold: 10, call: 30, raise: 60 };
+                } else if (hand.label.includes('Q')) {
+                    return { fold: 40, call: 50, raise: 10 };
+                } else {
+                    return { fold: 80, call: 15, raise: 5 };
+                }
+            } else if (situation === 'open') {
+                // First to act: check or bet
+                if (hand.type === 'Pair' || hand.label.includes('K')) {
+                    return { check: 20, bet: 80 };
+                } else if (hand.label.includes('Q')) {
+                    return { check: 60, bet: 40 };
+                } else {
+                    return { check: 85, bet: 15 };
+                }
+            }
+
+            return { fold: 50, call: 30, raise: 20 };
+        }
+
+        function getPrimaryAction(strategy) {
+            let max = 0;
+            let primary = 'mixed';
+
+            for (const [action, freq] of Object.entries(strategy)) {
+                if (freq > max) {
+                    max = freq;
+                    primary = action;
+                }
+            }
+
+            return max > 70 ? primary : 'mixed';
+        }
+
+        function renderGrid(gameType) {
+            const grid = document.getElementById('rangeGrid');
+            grid.innerHTML = '';
+            grid.className = `range-grid ${gameType}`;
+
+            const hands = gameType === 'leduc' ? leducHands : nlhHands;
+            const situation = document.getElementById('facing').value;
+
+            hands.forEach(hand => {
+                const strategy = getStrategy(hand, situation);
+                const primaryAction = getPrimaryAction(strategy);
+
+                const cell = document.createElement('div');
+                cell.className = `hand-cell action-${primaryAction}`;
+                cell.onclick = () => selectHand(hand, strategy);
+
+                const label = document.createElement('div');
+                label.className = 'hand-label';
+                label.textContent = hand.label;
+
+                const freq = document.createElement('div');
+                freq.className = 'hand-freq';
+                const maxFreq = Math.max(...Object.values(strategy));
+                freq.textContent = `${maxFreq}%`;
+
+                cell.appendChild(label);
+                cell.appendChild(freq);
+                grid.appendChild(cell);
+            });
+        }
+
+        function selectHand(hand, strategy) {
+            // Remove previous selection
+            document.querySelectorAll('.hand-cell').forEach(cell => {
+                cell.classList.remove('selected');
+            });
+
+            // Add selection to clicked cell
+            event.currentTarget.classList.add('selected');
+
+            // Update info panel
+            document.getElementById('handName').textContent = hand.label;
+            document.getElementById('handType').textContent = hand.type;
+
+            // Update strategy bars
+            const barsContainer = document.getElementById('strategyBars');
+            barsContainer.innerHTML = '';
+
+            const actionColors = {
+                fold: '#c0392b',
+                check: '#95a5a6',
+                call: '#3498db',
+                bet: '#e67e22',
+                raise: '#27ae60'
+            };
+
+            for (const [action, freq] of Object.entries(strategy)) {
+                const item = document.createElement('div');
+                item.className = 'strategy-item';
+
+                const label = document.createElement('div');
+                label.className = 'strategy-label';
+                label.innerHTML = `<span>${action.charAt(0).toUpperCase() + action.slice(1)}</span><span>${freq}%</span>`;
+
+                const bar = document.createElement('div');
+                bar.className = 'strategy-bar';
+
+                const fill = document.createElement('div');
+                fill.className = 'strategy-fill';
+                fill.style.width = `${freq}%`;
+                fill.style.background = actionColors[action] || '#999';
+
+                bar.appendChild(fill);
+                item.appendChild(label);
+                item.appendChild(bar);
+                barsContainer.appendChild(item);
+            }
+        }
+
+        function switchGame() {
+            const gameType = document.getElementById('gameType').value;
+            renderGrid(gameType);
+        }
+
+        function updateRange() {
+            const gameType = document.getElementById('gameType').value;
+            const situation = document.getElementById('facing').value;
+
+            // Update game state description
+            const position = document.getElementById('position').value.toUpperCase();
+            const street = document.getElementById('street').value;
+
+            let stateDesc = `${position} `;
+            if (situation === 'open') {
+                stateDesc += 'first to act';
+            } else if (situation === 'vs-raise') {
+                stateDesc += 'facing raise';
+            } else if (situation === 'vs-3bet') {
+                stateDesc += 'facing 3-bet';
+            } else {
+                stateDesc += 'facing 4-bet';
+            }
+            stateDesc += ` on ${street}`;
+
+            document.getElementById('gameState').textContent = stateDesc;
+
+            renderGrid(gameType);
+        }
+
+        // Initialize
+        renderGrid('leduc');
+        updateRange();
+
+        // Add event listeners
+        document.getElementById('position').addEventListener('change', updateRange);
+        document.getElementById('street').addEventListener('change', updateRange);
+    </script>
+</body>
+</html>
