@@ -1,0 +1,32 @@
+{
+  "name": "nlh-solver-spec-kit",
+  "version": "1.0.0",
+  "description": "A high-performance CFR+ based solver for computing Nash equilibrium strategies in No-Limit Texas Hold'em poker.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint strategy-viewer.html",
+    "lint:fix": "eslint strategy-viewer.html --fix",
+    "lint:watch": "nodemon --watch strategy-viewer.html --exec 'npm run lint'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ta1yun/nlh-solver-spec-kit.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ta1yun/nlh-solver-spec-kit/issues"
+  },
+  "homepage": "https://github.com/ta1yun/nlh-solver-spec-kit#readme",
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.28.6",
+    "eslint": "^8.57.1",
+    "eslint-plugin-html": "^8.1.4",
+    "eslint-plugin-react": "^7.37.5"
+  }
+}
