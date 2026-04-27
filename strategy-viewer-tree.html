@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leduc Strategy Viewer - Recursive Tree</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #06070a; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+
+  .header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background: #08090d;
+  }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 320px;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    padding: 1.5rem;
+    overflow-y: auto;
+    background: #08090d;
+  }
+
+  .content { flex: 1; padding: 2rem; overflow-y: auto; }
+
+  .btn {
+    padding: 0.75rem 1.5rem;
+    margin: 0.5rem 0.5rem 0.5rem 0;
+    border-radius: 8px;
+    border: 2px solid;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.15s;
+    background: transparent;
+    font-family: inherit;
+  }
+
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.2); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-fold { border-color: #e5484d; color: #e5484d; }
+  .btn-check { border-color: #8b8d98; color: #8b8d98; }
+  .btn-call { border-color: #3b82f6; color: #3b82f6; }
+  .btn-bet { border-color: #f59e0b; color: #f59e0b; }
+  .btn-raise { border-color: #22c55e; color: #22c55e; }
+
+  .btn-reset {
+    padding: 0.5rem 1rem;
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid #3b82f6;
+    color: #60a5fa;
+    font-size: 0.875rem;
+  }
+
+  .hand-card {
+    padding: 1.25rem;
+    margin: 0.75rem 0;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+  }
+
+  .hand-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #f59e0b;
+  }
+
+  .freq-row {
+    display: flex;
+    align-items: center;
+    margin: 0.75rem 0;
+  }
+
+  .freq-label {
+    width: 90px;
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.6);
+    text-transform: capitalize;
+  }
+
+  .freq-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    min-width: 65px;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .freq-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 5px;
+    margin-left: 1rem;
+    overflow: hidden;
+  }
+
+  .freq-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.3s ease;
+  }
+
+  .history-item {
+    padding: 0.6rem 0.9rem;
+    margin: 0.3rem 0;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    font-size: 0.875rem;
+  }
+
+  .history-item.chance {
+    background: rgba(168, 85, 247, 0.15);
+    border-left: 3px solid #a855f7;
+  }
+
+  .player { font-weight: 600; color: #60a5fa; }
+
+  .section-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.4);
+    margin: 1.5rem 0 0.75rem 0;
+  }
+
+  .section-title:first-child { margin-top: 0; }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    padding: 1.25rem;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    margin-bottom: 2rem;
+  }
+
+  .meta-item {}
+  .meta-label {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .meta-value { font-size: 1.5rem; font-weight: 700; }
+
+  .error {
+    padding: 2rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 2px solid #ef4444;
+    border-radius: 12px;
+    color: #fca5a5;
+  }
+
+  .board-selector {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .board-btn {
+    padding: 0.75rem 1.25rem;
+    background: rgba(168, 85, 247, 0.15);
+    border: 2px solid #a855f7;
+    border-radius: 6px;
+    color: #c084fc;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .board-btn:hover { background: rgba(168, 85, 247, 0.25); }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script src="leduc-tree.js"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+function App() {
+  const tree = window.LEDUC_TREE;
+  const [currentNode, setCurrentNode] = useState(tree?.j);
+  const [history, setHistory] = useState([]);
+
+  if (!tree) {
+    return (
+      <div className="error" style={{ margin: '2rem' }}>
+        <h2 style={{ marginBottom: '1rem' }}>Error Loading Tree</h2>
+        <p>Could not load LEDUC_TREE. Make sure leduc-tree.js is in the same directory.</p>
+      </div>
+    );
+  }
+
+  if (!currentNode) {
+    return (
+      <div className="error" style={{ margin: '2rem' }}>
+        <h2 style={{ marginBottom: '1rem' }}>Invalid Node</h2>
+        <button className="btn-reset" onClick={() => { setCurrentNode(tree.j); setHistory([]); }}>
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  // Handle terminal nodes
+  if (currentNode.terminal) {
+    return (
+      <div style={{ padding: '2rem' }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Game Over</h1>
+          <p style={{ color: 'rgba(255,255,255,0.6)' }}>Outcome: {currentNode.outcome}</p>
+        </div>
+        <button className="btn-reset" onClick={() => { setCurrentNode(tree.j); setHistory([]); }}>
+          Start Over
+        </button>
+        <div className="section-title">History</div>
+        {history.map((item, i) => (
+          <div key={i} className={`history-item ${item.type}`}>
+            {item.type === 'chance' ? item.label : (
+              <><span className="player">{item.player}</span> {item.action}</>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Handle chance nodes (board selection)
+  if (currentNode.chance) {
+    return (
+      <div style={{ padding: '2rem' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Round 1 Complete — Select Board</h1>
+        <div className="board-selector">
+          {currentNode.outcomes.map(outcome => (
+            <button key={outcome.board} className="board-btn"
+              onClick={() => {
+                setHistory([...history, { type: 'chance', label: `Board: ${outcome.board}` }]);
+                setCurrentNode(outcome.node);
+              }}>
+              {outcome.board}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Regular decision node
+  const meta = currentNode.meta || {};
+  const round = meta.round || 1;
+  const pot = meta.pot || 2;
+  const toCall = meta.toCall || 0;
+  const board = meta.board || [];
+
+  const handleAction = (action) => {
+    const currentPlayer = history.filter(h => h.type === 'action').length % 2 === 0 ? 'P1' : 'P2';
+    setHistory([...history, { type: 'action', player: currentPlayer, action }]);
+    setCurrentNode(currentNode.children[action]);
+  };
+
+  const reset = () => {
+    setCurrentNode(tree.j);
+    setHistory([]);
+  };
+
+  const actionColors = {
+    fold: '#e5484d',
+    check: '#8b8d98',
+    call: '#3b82f6',
+    bet: '#f59e0b',
+    raise: '#22c55e',
+  };
+
+  return (
+    <>
+      <div className="header">
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Leduc Hold'em — Recursive Tree Navigator</h1>
+      </div>
+
+      <div className="main">
+        <div className="sidebar">
+          <button className="btn-reset" onClick={reset}>← Reset</button>
+
+          <div className="section-title">Game State</div>
+          <div style={{ fontSize: '0.9rem', lineHeight: 2 }}>
+            <div><strong>Round:</strong> {round}</div>
+            <div><strong>Board:</strong> {board.length > 0 ? board.join(' ') : 'Not dealt'}</div>
+            <div><strong>Pot:</strong> {pot}</div>
+            <div><strong>To Call:</strong> {toCall}</div>
+          </div>
+
+          <div className="section-title">History</div>
+          {history.length === 0 ? (
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem' }}>Game start</div>
+          ) : (
+            history.map((item, i) => (
+              <div key={i} className={`history-item ${item.type}`}>
+                {item.type === 'chance' ? item.label : (
+                  <><span className="player">{item.player}</span> {item.action}</>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="content">
+          <div className="section-title">Available Actions</div>
+          <div style={{ marginBottom: '3rem' }}>
+            {currentNode.actions?.map(action => (
+              <button key={action} className={`btn btn-${action}`}
+                onClick={() => handleAction(action)}>
+                {action.charAt(0).toUpperCase() + action.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="section-title">Optimal Strategy</div>
+          {currentNode.hands?.map(hand => (
+            <div key={hand.id} className="hand-card">
+              <div className="hand-name">{hand.label}</div>
+              {Object.entries(hand.freq).map(([action, freq]) => (
+                <div key={action} className="freq-row">
+                  <div className="freq-label">{action}</div>
+                  <div className="freq-value">{(freq * 100).toFixed(1)}%</div>
+                  <div className="freq-bar-bg">
+                    <div className="freq-bar-fill"
+                      style={{
+                        width: `${freq * 100}%`,
+                        background: actionColors[action] || '#8b8d98'
+                      }}>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>

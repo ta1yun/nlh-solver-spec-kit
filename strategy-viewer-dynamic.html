@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dynamic Strategy Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#06070a; color:#fff; font-family: 'Inter', sans-serif; height: 100%; }
+  * { box-sizing: border-box; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .header { padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .history-panel {
+    width: 300px;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    padding: 1.5rem;
+    overflow-y: auto;
+    background: #08090d;
+  }
+
+  .strategy-panel {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+  }
+
+  .action-btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    margin: 0.5rem 0.5rem 0.5rem 0;
+    border-radius: 8px;
+    border: 2px solid;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    background: transparent;
+  }
+
+  .action-btn:hover { transform: translateY(-2px); opacity: 0.9; }
+
+  .btn-fold { border-color: #e5484d; color: #e5484d; }
+  .btn-fold:hover { background: rgba(229, 72, 77, 0.1); }
+
+  .btn-check { border-color: #8b8d98; color: #8b8d98; }
+  .btn-check:hover { background: rgba(139, 141, 152, 0.1); }
+
+  .btn-call { border-color: #3b82f6; color: #3b82f6; }
+  .btn-call:hover { background: rgba(59, 130, 246, 0.1); }
+
+  .btn-bet { border-color: #f59e0b; color: #f59e0b; }
+  .btn-bet:hover { background: rgba(245, 158, 11, 0.1); }
+
+  .btn-raise { border-color: #22c55e; color: #22c55e; }
+  .btn-raise:hover { background: rgba(34, 197, 94, 0.1); }
+
+  .hand-card {
+    padding: 1rem;
+    margin: 0.5rem 0;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+  }
+
+  .hand-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: #f59e0b;
+  }
+
+  .freq-bar {
+    display: flex;
+    align-items: center;
+    margin: 0.5rem 0;
+  }
+
+  .freq-label {
+    width: 80px;
+    font-size: 0.875rem;
+    color: rgba(255,255,255,0.6);
+  }
+
+  .freq-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    min-width: 60px;
+  }
+
+  .freq-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    margin-left: 1rem;
+    overflow: hidden;
+  }
+
+  .freq-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+
+  .history-item {
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0;
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    font-size: 0.875rem;
+  }
+
+  .history-item.chance {
+    background: rgba(168, 85, 247, 0.15);
+    border-left: 3px solid #a855f7;
+  }
+
+  .player { font-weight: 600; color: #60a5fa; }
+
+  .section-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+  }
+
+  .section-title:first-child { margin-top: 0; }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+  }
+
+  .meta-item { }
+  .meta-label { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-bottom: 0.25rem; }
+  .meta-value { font-size: 1.25rem; font-weight: 600; }
+
+  .error {
+    padding: 1.5rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 2px solid #ef4444;
+    border-radius: 8px;
+    color: #fca5a5;
+  }
+
+  .btn-reset {
+    padding: 0.5rem 1rem;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    color: #60a5fa;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .btn-reset:hover { background: rgba(59, 130, 246, 0.3); }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script src="leduc-complete.js"></script>
+
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+// ============================================================
+// Dynamic Scenario Navigator
+// ============================================================
+
+function ScenarioNavigator({ scenarios, apiEndpoint }) {
+  const [history, setHistory] = useState([]);
+  const [currentScenarioId, setCurrentScenarioId] = useState('r1_j_');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Get current scenario (from static export or API)
+  const currentScenario = useMemo(() => {
+    if (scenarios && scenarios[currentScenarioId]) {
+      return scenarios[currentScenarioId];
+    }
+    return null;
+  }, [currentScenarioId, scenarios]);
+
+  // Parse history for display
+  const historyDisplay = useMemo(() => {
+    const items = [];
+    for (const item of history) {
+      if (item.type === 'deal') {
+        items.push({ type: 'chance', label: `Board: ${item.board}` });
+      } else {
+        items.push({ type: 'action', player: item.player, action: item.action });
+      }
+    }
+    return items;
+  }, [history]);
+
+  // Handle action selection
+  const handleAction = async (action) => {
+    const currentPlayer = getCurrentPlayer(currentScenarioId);
+
+    // Build next scenario ID
+    const nextId = buildNextScenarioId(currentScenarioId, action.id);
+
+    // Check if it's a round transition (terminal in R1)
+    const isR1Terminal = currentScenarioId.startsWith('r1_') &&
+                         ['xx', 'bc', 'rc', 'xbc', 'brc', 'xbrc'].some(pattern =>
+                           nextId.endsWith('_' + pattern.split('').join('_')));
+
+    if (isR1Terminal) {
+      // This ends R1, need to pick a board for R2
+      // For now, auto-select Q board
+      const r1Path = extractR1Path(nextId);
+      const r2Id = `r2_q_${r1Path}_`;
+
+      // Add action to history
+      setHistory([...history,
+        { type: 'action', player: currentPlayer, action: action.label },
+        { type: 'deal', board: 'Q♠' }
+      ]);
+      setCurrentScenarioId(r2Id);
+    } else {
+      // Normal continuation
+      setHistory([...history, { type: 'action', player: currentPlayer, action: action.label }]);
+      setCurrentScenarioId(nextId);
+    }
+  };
+
+  // Reset to root
+  const reset = () => {
+    setHistory([]);
+    setCurrentScenarioId('r1_j_');
+    setError(null);
+  };
+
+  // Render
+  if (!scenarios) {
+    return (
+      <div className="app">
+        <div style={{ padding: '2rem' }}>
+          <div className="error">
+            <h2 style={{ marginBottom: '1rem' }}>Error Loading Scenarios</h2>
+            <p>Could not load LEDUC_COMPLETE. Make sure leduc-complete.js is in the same directory.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentScenario) {
+    return (
+      <div className="app">
+        <div style={{ padding: '2rem' }}>
+          <div className="error">
+            <h2 style={{ marginBottom: '1rem' }}>Scenario Not Found</h2>
+            <p>Scenario ID: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>{currentScenarioId}</code></p>
+            <button className="btn-reset" onClick={reset} style={{ marginTop: '1rem' }}>Reset</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const round = currentScenarioId.startsWith('r1_') ? 1 : 2;
+  const board = currentScenario.meta?.board || [];
+  const pot = currentScenario.meta?.pot || 2;
+  const toCall = currentScenario.meta?.toCall || 0;
+
+  return (
+    <div className="app">
+      <div className="header">
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dynamic Strategy Viewer</h1>
+        <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.5rem' }}>
+          Scenario: <code style={{ color: '#22c55e' }}>{currentScenarioId}</code>
+        </div>
+      </div>
+
+      <div className="main">
+        {/* History Panel */}
+        <div className="history-panel">
+          <div style={{ marginBottom: '1rem' }}>
+            <button className="btn-reset" onClick={reset}>← Reset</button>
+          </div>
+
+          <div className="section-title">History</div>
+          {historyDisplay.length === 0 ? (
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem' }}>Game start</div>
+          ) : (
+            historyDisplay.map((item, i) => (
+              <div key={i} className={`history-item ${item.type}`}>
+                {item.type === 'chance' ? (
+                  <span>{item.label}</span>
+                ) : (
+                  <span><span className="player">{item.player}</span> {item.action}</span>
+                )}
+              </div>
+            ))
+          )}
+
+          <div className="section-title">Game State</div>
+          <div style={{ fontSize: '0.875rem', lineHeight: 1.8 }}>
+            <div><strong>Round:</strong> {round}</div>
+            <div><strong>Board:</strong> {board.length > 0 ? board.join(' ') : 'Not dealt'}</div>
+            <div><strong>Pot:</strong> {pot}</div>
+            <div><strong>To Call:</strong> {toCall}</div>
+          </div>
+        </div>
+
+        {/* Strategy Panel */}
+        <div className="strategy-panel">
+          <div className="section-title">Available Actions</div>
+          <div style={{ marginBottom: '3rem' }}>
+            {currentScenario.actions.map(action => (
+              <button
+                key={action.id}
+                className={`action-btn btn-${action.id}`}
+                onClick={() => handleAction(action)}>
+                {action.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="section-title">Optimal Strategy</div>
+          {currentScenario.hands.map(hand => (
+            <div key={hand.id} className="hand-card">
+              <div className="hand-name">{hand.label}</div>
+              {Object.entries(hand.freq).map(([actionId, freq]) => {
+                const action = currentScenario.actions.find(a => a.id === actionId);
+                const color = action?.color || '#8b8d98';
+                return (
+                  <div key={actionId} className="freq-bar">
+                    <div className="freq-label">{actionId}</div>
+                    <div className="freq-value">{(freq * 100).toFixed(1)}%</div>
+                    <div className="freq-bar-bg">
+                      <div className="freq-bar-fill" style={{ width: `${freq * 100}%`, background: color }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Helper Functions
+// ============================================================
+
+function getCurrentPlayer(scenarioId) {
+  // Extract history from scenario ID
+  const match = scenarioId.match(/^r\d_[jqk]_(.*)$/);
+  if (!match) return 'P1';
+
+  const history = match[1].replace(/_/g, '');
+
+  // In R2, history starts after the deal
+  if (scenarioId.startsWith('r2_')) {
+    // Find where R1 ends (patterns like xx, bc, etc.)
+    const r1Patterns = ['xbrc', 'brc', 'xbc', 'bc', 'rc', 'xx'];
+    for (const pattern of r1Patterns) {
+      if (history.startsWith(pattern)) {
+        const r2History = history.substring(pattern.length);
+        return r2History.length % 2 === 0 ? 'P1' : 'P2';
+      }
+    }
+  }
+
+  // R1 or couldn't parse
+  return history.length % 2 === 0 ? 'P1' : 'P2';
+}
+
+function buildNextScenarioId(currentId, actionId) {
+  // Simple append strategy
+  if (currentId.endsWith('_')) {
+    return currentId + actionId;
+  } else {
+    return currentId + '_' + actionId;
+  }
+}
+
+function extractR1Path(scenarioId) {
+  // Extract the R1 action sequence from scenario ID
+  const match = scenarioId.match(/^r1_[jqk]_(.*)$/);
+  if (!match) return '';
+  return match[1].replace(/_/g, '');
+}
+
+// ============================================================
+// Main App
+// ============================================================
+
+function App() {
+  const scenarios = window.LEDUC_COMPLETE;
+
+  return (
+    <ScenarioNavigator
+      scenarios={scenarios}
+      apiEndpoint="/solve" // For future on-demand support
+    />
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>
