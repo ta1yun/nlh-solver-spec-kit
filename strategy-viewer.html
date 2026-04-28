@@ -24,13 +24,35 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
-<!-- Load complete Leduc export with all 108 scenarios -->
-<script src="leduc-complete.js"></script>
+<!-- Load recursive Leduc tree -->
+<script src="leduc-tree.js"></script>
 
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
 
-// Build complete game tree from our solver data
+/**
+ * CHANCE NODE CONCEPT (Generalized for all poker variants)
+ *
+ * Chance nodes (board dealing) appear exactly when betting rounds complete.
+ * A betting round is complete when:
+ * 1. All active players have equal investment (pot is "capped")
+ * 2. The last action was passive (check or call, not bet or raise)
+ * 3. At least one action has been taken
+ *
+ * In Leduc, this happens after:
+ * - "xx"   (both check)
+ * - "bc"   (bet-call)
+ * - "brc"  (bet-raise-call)
+ * - "xbc"  (check-bet-call)
+ * - "xbrc" (check-bet-raise-call)
+ *
+ * In NLH, the same logic applies but with more complex bet sizing.
+ * The PokerGameState.isBettingRoundComplete() method implements this.
+ *
+ * This pattern is fundamental to all poker game trees.
+ */
+
+// Adapter: Convert recursive tree to flat node structure for UI
 function buildLeducTree() {
   const ACT = {
     fold:  { id:'fold',  label:'Fold',  color:'#e5484d' },
@@ -40,473 +62,117 @@ function buildLeducTree() {
     raise: { id:'raise', label:'Raise', color:'#22c55e' },
   };
 
-  const SCENARIOS = window.LEDUC_COMPLETE;
-  if (!SCENARIOS) {
-    console.error('LEDUC_COMPLETE not loaded! Make sure leduc-complete.js is in the same directory.');
+  const RECURSIVE_TREE = window.LEDUC_TREE;
+  if (!RECURSIVE_TREE) {
+    console.error('LEDUC_TREE not loaded! Make sure leduc-tree.js is in the same directory.');
     return null;
   }
-  console.log('✓ Loaded', Object.keys(SCENARIOS).length, 'scenarios');
+  console.log('✓ Loaded recursive tree with', Object.keys(RECURSIVE_TREE).length, 'root boards');
 
-  // Get strategies from complete export (using Q board scenarios as templates)
-  const r1_p1_first = SCENARIOS.r1_q_; // P1 first to act (root)
-  const r1_p2_facing_bet = SCENARIOS.r1_q_b; // P2 facing P1's bet
-  const r1_p1_facing_raise = SCENARIOS.r1_q_br; // P1 facing P2's raise after bet
-
+  // Flatten recursive tree into node ID structure
   const nodes = {};
+  let nodeCounter = 0;
 
-  // Helper: convert hands array to strategies object
-  function handsToStrategies(scenario) {
-    const strat = {};
-    for (const h of scenario.hands) {
-      strat[h.id] = {
-        freq: { ...h.freq },
-        equity: h.equity ?? 0.5,  // Default to 50% if not provided
-        evTotal: h.evTotal ?? 0,   // Default to 0 if not provided
-        ev: h.ev || {},
+  // Recursively flatten tree nodes and assign IDs
+  function flattenNode(recursiveNode, board, path = '') {
+    if (!recursiveNode) return null;
+
+    // Generate unique ID
+    const nodeId = `node_${nodeCounter++}`;
+
+    // Handle terminal nodes
+    if (recursiveNode.terminal) {
+      nodes[nodeId] = {
+        kind: 'terminal',
+        outcome: recursiveNode.outcome || 'showdown',
+        label: 'Game Over',
       };
+      return nodeId;
     }
-    return strat;
-  }
 
-  // Helper: get scenario from complete export
-  function getScenario(scenarioId) {
-    return SCENARIOS[scenarioId] || null;
-  }
+    // Handle chance nodes (board selection)
+    if (recursiveNode.chance) {
+      const children = recursiveNode.outcomes.map(outcome => {
+        // Reset path for Round 2 - P1 always acts first after board is dealt
+        const childId = flattenNode(outcome.node, outcome.board.charAt(0), '');
+        return {
+          label: outcome.board,
+          board: outcome.board.charAt(0),
+          nodeId: childId,
+        };
+      });
 
-  // ROOT: P1 first to act
-  nodes['root'] = {
-    id:'root', kind:'decision', round:1, player:'P1',
-    label:'Round 1 — P1 to act',
-    pot:2, toCall:0,
-    strategies: handsToStrategies(r1_p1_first),
-    actions: r1_p1_first.actions,
-    children: { check:'p1_check', bet:'p1_bet' },
-  };
-
-  // P1 bet → P2 facing bet
-  nodes['p1_bet'] = {
-    id:'p1_bet', kind:'decision', round:1, player:'P2',
-    label:'Round 1 — P2 facing P1 bet',
-    pot:4, toCall:2,
-    strategies: handsToStrategies(r1_p2_facing_bet),
-    actions: r1_p2_facing_bet.actions,
-    children: { fold:'p2_folds', call:'p2_called', raise:'p2_raised' },
-  };
-
-  nodes['p2_folds'] = { id:'p2_folds', kind:'terminal', label:'P2 folds — P1 wins pot of 4' };
-
-  // P2 called → board comes
-  nodes['p2_called'] = {
-    id:'p2_called', kind:'chance',
-    label:'P2 calls — deal board (pot 6)',
-    children: [
-      {label:'K♠', card:{rank:'K',suit:'♠',id:'Ka'}, nodeId:'r2_called_K'},
-      {label:'Q♠', card:{rank:'Q',suit:'♠',id:'Qa'}, nodeId:'r2_called_Q'},
-      {label:'J♠', card:{rank:'J',suit:'♠',id:'Ja'}, nodeId:'r2_called_J'},
-    ],
-  };
-
-  // P2 raised → P1 facing raise
-  nodes['p2_raised'] = {
-    id:'p2_raised', kind:'decision', round:1, player:'P1',
-    label:'Round 1 — P1 facing P2 raise',
-    pot:8, toCall:2,
-    strategies: handsToStrategies(r1_p1_facing_raise),
-    actions: r1_p1_facing_raise.actions,
-    children: { fold:'p1_folds', call:'r1_capped' },
-  };
-
-  nodes['p1_folds'] = { id:'p1_folds', kind:'terminal', label:'P1 folds — P2 wins pot of 8' };
-
-  nodes['r1_capped'] = {
-    id:'r1_capped', kind:'chance',
-    label:'Round 1 capped — deal board',
-    children: [
-      {label:'K♠', nodeId:'r2_capped_K'},
-      {label:'Q♠', nodeId:'r2_capped_Q'},
-      {label:'J♠', nodeId:'r2_capped_J'},
-    ],
-  };
-
-  // Get R1 scenarios for check path
-  const r1_p2_after_check = SCENARIOS.r1_q_x; // P2 after P1 check
-  const r1_p1_facing_xb = SCENARIOS.r1_q_xb; // P1 facing bet after check
-
-  // P1 check → P2 to act
-  nodes['p1_check'] = {
-    id:'p1_check', kind:'decision', round:1, player:'P2',
-    label:'Round 1 — P2 after P1 check',
-    pot:2, toCall:0,
-    strategies: handsToStrategies(r1_p2_after_check),
-    actions: r1_p2_after_check.actions,
-    children: { check:'r1_both_check', bet:'p2_bet_after_check' },
-  };
-
-  nodes['r1_both_check'] = {
-    id:'r1_both_check', kind:'chance',
-    label:'Both check — deal board',
-    children: [
-      {label:'K♠', nodeId:'r2_check_K'},
-      {label:'Q♠', nodeId:'r2_check_Q'},
-      {label:'J♠', nodeId:'r2_check_J'},
-    ],
-  };
-
-  nodes['p2_bet_after_check'] = {
-    id:'p2_bet_after_check', kind:'decision', round:1, player:'P1',
-    label:'Round 1 — P1 facing P2 bet (after check)',
-    pot:4, toCall:2,
-    strategies: handsToStrategies(r1_p1_facing_xb),
-    actions: r1_p1_facing_xb.actions,
-    children: { fold:'p1_folds_r1', call:'p1_called_p2bet', raise:'p1_raised_p2bet' },
-  };
-
-  nodes['p1_folds_r1'] = { id:'p1_folds_r1', kind:'terminal', label:'P1 folds — P2 wins pot of 4' };
-
-  nodes['p1_called_p2bet'] = {
-    id:'p1_called_p2bet', kind:'chance',
-    label:'P1 calls P2 bet — deal board',
-    children: [
-      {label:'K♠', nodeId:'r2_p1called_K'},
-      {label:'Q♠', nodeId:'r2_p1called_Q'},
-      {label:'J♠', nodeId:'r2_p1called_J'},
-    ],
-  };
-
-  // Get scenario for P2 facing raise after check-bet-raise
-  const r1_p2_facing_xbr = SCENARIOS.r1_q_xbr;
-
-  // P1 raised P2's bet → P2 facing raise
-  nodes['p1_raised_p2bet'] = {
-    id:'p1_raised_p2bet', kind:'decision', round:1, player:'P2',
-    label:'Round 1 — P2 facing P1 raise (after check-bet-raise)',
-    pot:8, toCall:2,
-    strategies: handsToStrategies(r1_p2_facing_xbr),
-    actions: r1_p2_facing_xbr.actions,
-    children: { fold:'p2_folds_to_raise', call:'r1_capped_xbr' },
-  };
-
-  nodes['p2_folds_to_raise'] = { id:'p2_folds_to_raise', kind:'terminal', label:'P2 folds to raise — P1 wins pot of 8' };
-
-  nodes['r1_capped_xbr'] = {
-    id:'r1_capped_xbr', kind:'chance',
-    label:'Round 1 capped (check-bet-raise-call) — deal board',
-    children: [
-      {label:'K♠', nodeId:'r2_capped_xbr_K'},
-      {label:'Q♠', nodeId:'r2_capped_xbr_Q'},
-      {label:'J♠', nodeId:'r2_capped_xbr_J'},
-    ],
-  };
-
-  // Round 2 nodes - use conditional strategies if available
-  for (const bid of ['K', 'Q', 'J']) {
-    const boardName = `${bid}♠`;
-
-    // R2 after P1 bet, P2 call (pot 6) - P1 to act
-    const r2_called = getScenario(`r2_${bid.toLowerCase()}_bc_`);
-    if (r2_called) {
-      nodes[`r2_called_${bid}`] = {
-        id:`r2_called_${bid}`, kind:'decision', round:2, player:'P1',
-        label:`Round 2 — board ${boardName} — P1 to act (after bet-call R1)`,
-        pot:6, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_called),
-        actions: r2_called.actions,
-        children: { check:`r2_called_${bid}_check`, bet:`r2_called_${bid}_bet` },
+      nodes[nodeId] = {
+        kind: 'chance',
+        label: 'Deal board card',
+        children,
       };
+      return nodeId;
+    }
 
-      nodes[`r2_called_${bid}_check`] = {
-        id:`r2_called_${bid}_check`, kind:'terminal',
-        label:`Both check — showdown (board ${boardName})`,
-      };
-
-      // P2 facing P1's bet in Round 2
-      const r2_facing_bet = getScenario(`r2_${bid.toLowerCase()}_bc_b`);
-      if (r2_facing_bet) {
-        nodes[`r2_called_${bid}_bet`] = {
-          id:`r2_called_${bid}_bet`, kind:'decision', round:2, player:'P2',
-          label:`Round 2 — board ${boardName} — P2 facing bet`,
-          pot:10, toCall:4, board:[boardName],
-          strategies: handsToStrategies(r2_facing_bet),
-          actions: r2_facing_bet.actions,
-          children: { fold:`r2_p2_folds_${bid}`, call:`r2_p2_calls_${bid}`, raise:`r2_p2_raises_${bid}` },
-        };
-
-        nodes[`r2_p2_folds_${bid}`] = {
-          id:`r2_p2_folds_${bid}`, kind:'terminal',
-          label:`P2 folds — P1 wins pot of 10 (board ${boardName})`,
-        };
-
-        nodes[`r2_p2_calls_${bid}`] = {
-          id:`r2_p2_calls_${bid}`, kind:'terminal',
-          label:`P2 calls — showdown (board ${boardName})`,
-        };
-
-        // P1 facing P2's raise in Round 2
-        const r2_facing_raise = getScenario(`r2_${bid.toLowerCase()}_bc_br`);
-        if (r2_facing_raise) {
-          nodes[`r2_p2_raises_${bid}`] = {
-            id:`r2_p2_raises_${bid}`, kind:'decision', round:2, player:'P1',
-            label:`Round 2 — board ${boardName} — P1 facing raise`,
-            pot:18, toCall:4, board:[boardName],
-            strategies: handsToStrategies(r2_facing_raise),
-            actions: r2_facing_raise.actions,
-            children: { fold:`r2_p1_folds_raise_${bid}`, call:`r2_p1_calls_raise_${bid}` },
-          };
-
-          nodes[`r2_p1_folds_raise_${bid}`] = {
-            id:`r2_p1_folds_raise_${bid}`, kind:'terminal',
-            label:`P1 folds to raise — P2 wins pot of 18 (board ${boardName})`,
-          };
-
-          nodes[`r2_p1_calls_raise_${bid}`] = {
-            id:`r2_p1_calls_raise_${bid}`, kind:'terminal',
-            label:`P1 calls raise — showdown, pot of 18 (board ${boardName})`,
-          };
-        } else {
-          nodes[`r2_p2_raises_${bid}`] = {
-            id:`r2_p2_raises_${bid}`, kind:'terminal',
-            label:`P2 raises — P1 to act (no strategy data)`,
-          };
-        }
-      } else {
-        nodes[`r2_called_${bid}_bet`] = {
-          id:`r2_called_${bid}_bet`, kind:'terminal',
-          label:`P1 bets — P2 to act (board ${boardName}) (no strategy data)`,
+    // Decision node - convert hands array to strategies object
+    const strategies = {};
+    if (recursiveNode.hands) {
+      for (const h of recursiveNode.hands) {
+        strategies[h.id] = {
+          freq: { ...h.freq },
+          equity: h.equity ?? 0.5,
+          evTotal: h.evTotal ?? 0,
+          ev: h.ev || {},
         };
       }
-    } else {
-      nodes[`r2_called_${bid}`] = {
-        id:`r2_called_${bid}`, kind:'terminal',
-        label:`Round 2 — board ${boardName} (no strategy data)`,
-      };
     }
 
-    // R2 after P1 bet, P2 raise, P1 call (pot 8) — P1 to act
-    const r2_brcd = getScenario(`r2_${bid.toLowerCase()}_brc_`);
-    if (r2_brcd) {
-      nodes[`r2_capped_${bid}`] = {
-        id:`r2_capped_${bid}`, kind:'decision', round:2, player:'P1',
-        label:`Round 2 — board ${boardName} — P1 to act (after bet-raise-call R1)`,
-        pot:8, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_brcd),
-        actions: r2_brcd.actions,
-        children: { check:`r2_capped_${bid}_check`, bet:`r2_capped_${bid}_bet` },
-      };
-    } else {
-      nodes[`r2_capped_${bid}`] = {
-        id:`r2_capped_${bid}`, kind:'terminal',
-        label:`Round 2 — board ${boardName} capped preflop (no data)`,
-      };
+    // Get metadata
+    const meta = recursiveNode.meta || {};
+    const round = meta.round || 1;
+    const pot = meta.pot || 2;
+    const toCall = meta.toCall || 0;
+
+    // Determine player from path length (P1 always acts first in R2)
+    const historyLength = path.length;
+    const player = historyLength % 2 === 0 ? 'P1' : 'P2';
+
+    // Convert action names to action objects
+    const actionObjects = recursiveNode.actions?.map(a => ACT[a]).filter(Boolean) || [];
+
+    // Flatten children recursively
+    const children = {};
+    if (recursiveNode.children) {
+      for (const [actionName, childNode] of Object.entries(recursiveNode.children)) {
+        children[actionName] = flattenNode(childNode, board, path + actionName.charAt(0));
+      }
     }
 
-    // R2 after both check in R1 (pot 2) — P1 to act
-    const r2_xxd = getScenario(`r2_${bid.toLowerCase()}_xx_`);
-    if (r2_xxd) {
-      nodes[`r2_check_${bid}`] = {
-        id:`r2_check_${bid}`, kind:'decision', round:2, player:'P1',
-        label:`Round 2 — board ${boardName} — P1 to act (both checked R1)`,
-        pot:2, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_xxd),
-        actions: r2_xxd.actions,
-        children: { check:`r2_check_${bid}_check`, bet:`r2_check_${bid}_bet` },
-      };
-    } else {
-      nodes[`r2_check_${bid}`] = {
-        id:`r2_check_${bid}`, kind:'terminal',
-        label:`Round 2 — board ${boardName} after checks (no data)`,
-      };
-    }
+    // Create decision node
+    nodes[nodeId] = {
+      kind: 'decision',
+      round,
+      pot,
+      toCall,
+      player,
+      board,
+      label: `Round ${round} — ${player} to act`,
+      actions: actionObjects,
+      strategies,
+      children,
+    };
 
-    // R2 after P1 check, P2 bet, P1 call (pot 6) — P1 to act first in R2
-    const r2_xbcd = getScenario(`r2_${bid.toLowerCase()}_xbc_`);
-    if (r2_xbcd) {
-      nodes[`r2_p1called_${bid}`] = {
-        id:`r2_p1called_${bid}`, kind:'decision', round:2, player:'P1',
-        label:`Round 2 — board ${boardName} — P1 to act (after check-bet-call R1)`,
-        pot:6, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_xbcd),
-        actions: r2_xbcd.actions,
-        children: { check:`r2_p1called_${bid}_check`, bet:`r2_p1called_${bid}_bet` },
-      };
-    } else {
-      nodes[`r2_p1called_${bid}`] = {
-        id:`r2_p1called_${bid}`, kind:'terminal',
-        label:`Round 2 — board ${boardName} after P1 called P2 bet (no data)`,
-      };
-    }
-
-    // R2 after P1 check, P2 bet, P1 raise, P2 call (pot 8) — P1 to act (NOT P2!)
-    const r2_xbrcd = getScenario(`r2_${bid.toLowerCase()}_xbrc_`);
-    if (r2_xbrcd) {
-      nodes[`r2_capped_xbr_${bid}`] = {
-        id:`r2_capped_xbr_${bid}`, kind:'decision', round:2, player:'P1',
-        label:`Round 2 — board ${boardName} — P1 to act (after check-bet-raise-call R1)`,
-        pot:8, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_xbrcd),
-        actions: r2_xbrcd.actions,
-        children: { check:`r2_capped_xbr_${bid}_check`, bet:`r2_capped_xbr_${bid}_bet` },
-      };
-    } else {
-      nodes[`r2_capped_xbr_${bid}`] = {
-        id:`r2_capped_xbr_${bid}`, kind:'terminal',
-        label:`Round 2 — board ${boardName} after xbrc (no data)`,
-      };
-    }
+    return nodeId;
   }
 
-  // Add terminal/continuation nodes for all R2 scenarios
-  for (const bid of ['K', 'Q', 'J']) {
-    const boardName = `${bid}♠`;
+  // Flatten all three board roots (they represent the same game tree)
+  const jRoot = flattenNode(RECURSIVE_TREE.j, 'J');
+  const qRoot = flattenNode(RECURSIVE_TREE.q, 'Q');
+  const kRoot = flattenNode(RECURSIVE_TREE.k, 'K');
 
-    // r2_check terminals (after both check R1, P1 acts)
-    nodes[`r2_check_${bid}_check`] = { id:`r2_check_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+  // The root points to Q board's starting node (Round 1, P1 to act)
+  // Note: j, q, k roots are equivalent in Round 1 since board isn't dealt yet
+  const root = qRoot;
 
-    // After P1 bets (xx|b), P2 acts
-    const r2_xx_b = getScenario(`r2_${bid.toLowerCase()}_xx_b`);
-    if (r2_xx_b) {
-      nodes[`r2_check_${bid}_bet`] = {
-        id:`r2_check_${bid}_bet`, kind:'decision', round:2, player:'P2',
-        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
-        pot:6, toCall:4, board:[boardName],
-        strategies: handsToStrategies(r2_xx_b),
-        actions: r2_xx_b.actions,
-        children: { fold:`r2_check_${bid}_bet_fold`, call:`r2_check_${bid}_bet_call`, raise:`r2_check_${bid}_bet_raise` },
-      };
-      nodes[`r2_check_${bid}_bet_fold`] = { id:`r2_check_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
-      nodes[`r2_check_${bid}_bet_call`] = { id:`r2_check_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
-      nodes[`r2_check_${bid}_bet_raise`] = { id:`r2_check_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
-    } else {
-      nodes[`r2_check_${bid}_bet`] = { id:`r2_check_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
-    }
+  console.log('✓ Flattened', Object.keys(nodes).length, 'nodes from recursive tree');
 
-    // r2_capped terminals (after bet-raise-call R1, P1 acts)
-    nodes[`r2_capped_${bid}_check`] = { id:`r2_capped_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
-
-    // After P1 bets (brc|b), P2 acts
-    const r2_brc_b = getScenario(`r2_${bid.toLowerCase()}_brc_b`);
-    if (r2_brc_b) {
-      nodes[`r2_capped_${bid}_bet`] = {
-        id:`r2_capped_${bid}_bet`, kind:'decision', round:2, player:'P2',
-        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
-        pot:12, toCall:4, board:[boardName],
-        strategies: handsToStrategies(r2_brc_b),
-        actions: r2_brc_b.actions,
-        children: { fold:`r2_capped_${bid}_bet_fold`, call:`r2_capped_${bid}_bet_call`, raise:`r2_capped_${bid}_bet_raise` },
-      };
-      nodes[`r2_capped_${bid}_bet_fold`] = { id:`r2_capped_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
-      nodes[`r2_capped_${bid}_bet_call`] = { id:`r2_capped_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
-      nodes[`r2_capped_${bid}_bet_raise`] = { id:`r2_capped_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
-    } else {
-      nodes[`r2_capped_${bid}_bet`] = { id:`r2_capped_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
-    }
-
-    // r2_p1called continuations (after P1 acts in R2)
-    const r2_xbc_x = getScenario(`r2_${bid.toLowerCase()}_xbc_x`);
-    if (r2_xbc_x) {
-      // After P1 checks, P2 acts
-      nodes[`r2_p1called_${bid}_check`] = {
-        id:`r2_p1called_${bid}_check`, kind:'decision', round:2, player:'P2',
-        label:`Round 2 — board ${boardName} — P2 to act (P1 checked)`,
-        pot:6, toCall:0, board:[boardName],
-        strategies: handsToStrategies(r2_xbc_x),
-        actions: r2_xbc_x.actions,
-        children: { check:`r2_p1called_${bid}_check_check`, bet:`r2_p1called_${bid}_check_bet` },
-      };
-      nodes[`r2_p1called_${bid}_check_check`] = { id:`r2_p1called_${bid}_check_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
-
-      // After P1 check, P2 bet → P1 to act (NOT terminal!)
-      const r2_xbc_xb = getScenario(`r2_${bid.toLowerCase()}_xbc_xb`);
-      if (r2_xbc_xb) {
-        nodes[`r2_p1called_${bid}_check_bet`] = {
-          id:`r2_p1called_${bid}_check_bet`, kind:'decision', round:2, player:'P1',
-          label:`Round 2 — board ${boardName} — P1 facing P2's bet`,
-          pot:10, toCall:4, board:[boardName],
-          strategies: handsToStrategies(r2_xbc_xb),
-          actions: r2_xbc_xb.actions,
-          children: { fold:`r2_p1called_${bid}_check_bet_fold`, call:`r2_p1called_${bid}_check_bet_call`, raise:`r2_p1called_${bid}_check_bet_raise` },
-        };
-        nodes[`r2_p1called_${bid}_check_bet_fold`] = { id:`r2_p1called_${bid}_check_bet_fold`, kind:'terminal', label:`P1 folds — P2 wins pot of 10 (board ${boardName})` };
-        nodes[`r2_p1called_${bid}_check_bet_call`] = { id:`r2_p1called_${bid}_check_bet_call`, kind:'terminal', label:`P1 calls — showdown (board ${boardName})` };
-
-        // After P1 raises, P2 to act (NOT terminal!)
-        const r2_xbc_xbr = getScenario(`r2_${bid.toLowerCase()}_xbc_xbr`);
-        if (r2_xbc_xbr) {
-          nodes[`r2_p1called_${bid}_check_bet_raise`] = {
-            id:`r2_p1called_${bid}_check_bet_raise`, kind:'decision', round:2, player:'P2',
-            label:`Round 2 — board ${boardName} — P2 facing P1's raise`,
-            pot:18, toCall:4, board:[boardName],
-            strategies: handsToStrategies(r2_xbc_xbr),
-            actions: r2_xbc_xbr.actions,
-            children: { fold:`r2_p1called_${bid}_check_bet_raise_fold`, call:`r2_p1called_${bid}_check_bet_raise_call` },
-          };
-          nodes[`r2_p1called_${bid}_check_bet_raise_fold`] = { id:`r2_p1called_${bid}_check_bet_raise_fold`, kind:'terminal', label:`P2 folds — P1 wins pot of 18 (board ${boardName})` };
-          nodes[`r2_p1called_${bid}_check_bet_raise_call`] = { id:`r2_p1called_${bid}_check_bet_raise_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
-        } else {
-          nodes[`r2_p1called_${bid}_check_bet_raise`] = { id:`r2_p1called_${bid}_check_bet_raise`, kind:'terminal', label:`P1 raises — P2 to act (no data)` };
-        }
-      } else {
-        nodes[`r2_p1called_${bid}_check_bet`] = { id:`r2_p1called_${bid}_check_bet`, kind:'terminal', label:`P2 bet, P1 to act (no data)` };
-      }
-    } else {
-      nodes[`r2_p1called_${bid}_check`] = { id:`r2_p1called_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
-    }
-
-    // After P1 bets in R2, P2 acts (NOT terminal!)
-    const r2_xbc_b = getScenario(`r2_${bid.toLowerCase()}_xbc_b`);
-    if (r2_xbc_b) {
-      nodes[`r2_p1called_${bid}_bet`] = {
-        id:`r2_p1called_${bid}_bet`, kind:'decision', round:2, player:'P2',
-        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
-        pot:10, toCall:4, board:[boardName],
-        strategies: handsToStrategies(r2_xbc_b),
-        actions: r2_xbc_b.actions,
-        children: { fold:`r2_p1called_${bid}_bet_fold`, call:`r2_p1called_${bid}_bet_call`, raise:`r2_p1called_${bid}_bet_raise` },
-      };
-      nodes[`r2_p1called_${bid}_bet_fold`] = { id:`r2_p1called_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins pot of 10 (board ${boardName})` };
-      nodes[`r2_p1called_${bid}_bet_call`] = { id:`r2_p1called_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
-
-      // After P2 raises, P1 to act (NOT terminal!)
-      const r2_xbc_br = getScenario(`r2_${bid.toLowerCase()}_xbc_br`);
-      if (r2_xbc_br) {
-        nodes[`r2_p1called_${bid}_bet_raise`] = {
-          id:`r2_p1called_${bid}_bet_raise`, kind:'decision', round:2, player:'P1',
-          label:`Round 2 — board ${boardName} — P1 facing P2's raise`,
-          pot:18, toCall:4, board:[boardName],
-          strategies: handsToStrategies(r2_xbc_br),
-          actions: r2_xbc_br.actions,
-          children: { fold:`r2_p1called_${bid}_bet_raise_fold`, call:`r2_p1called_${bid}_bet_raise_call` },
-        };
-        nodes[`r2_p1called_${bid}_bet_raise_fold`] = { id:`r2_p1called_${bid}_bet_raise_fold`, kind:'terminal', label:`P1 folds — P2 wins pot of 18 (board ${boardName})` };
-        nodes[`r2_p1called_${bid}_bet_raise_call`] = { id:`r2_p1called_${bid}_bet_raise_call`, kind:'terminal', label:`P1 calls — showdown (board ${boardName})` };
-      } else {
-        nodes[`r2_p1called_${bid}_bet_raise`] = { id:`r2_p1called_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (no data)` };
-      }
-    } else {
-      nodes[`r2_p1called_${bid}_bet`] = { id:`r2_p1called_${bid}_bet`, kind:'terminal', label:`P1 bet, P2 to act (no data)` };
-    }
-
-    // r2_capped_xbr terminals (after check-bet-raise-call R1, P1 acts in R2)
-    nodes[`r2_capped_xbr_${bid}_check`] = { id:`r2_capped_xbr_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
-
-    // After P1 bets (xbrc|b), P2 acts
-    const r2_xbrc_b = getScenario(`r2_${bid.toLowerCase()}_xbrc_b`);
-    if (r2_xbrc_b) {
-      nodes[`r2_capped_xbr_${bid}_bet`] = {
-        id:`r2_capped_xbr_${bid}_bet`, kind:'decision', round:2, player:'P2',
-        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
-        pot:12, toCall:4, board:[boardName],
-        strategies: handsToStrategies(r2_xbrc_b),
-        actions: r2_xbrc_b.actions,
-        children: { fold:`r2_capped_xbr_${bid}_bet_fold`, call:`r2_capped_xbr_${bid}_bet_call`, raise:`r2_capped_xbr_${bid}_bet_raise` },
-      };
-      nodes[`r2_capped_xbr_${bid}_bet_fold`] = { id:`r2_capped_xbr_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
-      nodes[`r2_capped_xbr_${bid}_bet_call`] = { id:`r2_capped_xbr_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
-      nodes[`r2_capped_xbr_${bid}_bet_raise`] = { id:`r2_capped_xbr_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
-    } else {
-      nodes[`r2_capped_xbr_${bid}_bet`] = { id:`r2_capped_xbr_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
-    }
-  }
-
+  // Helper functions for UI
   function nodeToStrategy(nodeId) {
     const node = nodes[nodeId];
     if (!node || node.kind !== 'decision') return null;
@@ -529,26 +195,30 @@ function buildLeducTree() {
         street:'round'+node.round, pot:node.pot, toCall:node.toCall,
         stack:10-node.pot, position:node.player, board:[],
       },
-      actions: node.actions, hands,
-      nodeId, label:node.label,
+      actions: node.actions,
+      hands,
     };
   }
 
   function boardRankOf(nodeId) {
-    const m = (nodeId || '').match(/^r2_[a-z]+_([KQJ])$/);
-    return m ? m[1] : null;
+    const node = nodes[nodeId];
+    if (!node) return null;
+    return node.board || null;
   }
 
-  function swapBoard(nodeId, targetRank) {
-    if (!nodeId) return null;
-    const re = /^(r2_[a-z]+_)([KQJ])$/;
-    const m = nodeId.match(re);
-    if (!m) return null;
-    const cand = m[1] + targetRank;
-    return nodes[cand] ? cand : null;
+  function swapBoard(currentNodeId, targetRank) {
+    // Find corresponding node with different board
+    // This is a simplified version - in the recursive tree,
+    // swapping boards means navigating to a parallel branch
+    const currentNode = nodes[currentNodeId];
+    if (!currentNode) return null;
+
+    // For now, return null - board swapping is more complex with recursive structure
+    // The UI can handle this gracefully
+    return null;
   }
 
-  return { nodes, root:'root', nodeToStrategy, ACT, boardRankOf, swapBoard };
+  return { nodes, root, nodeToStrategy, ACT, boardRankOf, swapBoard };
 }
 
 // ============================================================
@@ -566,6 +236,7 @@ function LeducCard({ hand, actions, visibleActions, selected, hovered, onHover, 
       onMouseLeave={()=>onHover&&onHover(null)}
       onClick={()=>onClick&&onClick(hand)}
       style={{
+
         position:'relative', width:90, height:128, borderRadius:8, cursor:'pointer',
         background:'#fff',
         border: selected ? '2px solid #fff' : hovered ? '2px solid rgba(255,255,255,0.45)' : '2px solid transparent',
