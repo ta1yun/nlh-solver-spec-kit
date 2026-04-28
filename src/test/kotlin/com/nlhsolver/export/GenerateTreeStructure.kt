@@ -111,6 +111,210 @@ class GenerateTreeStructure : FunSpec({
     }
 })
 
+/**
+ * Calculate showdown equity for a hand in Round 2.
+ * Equity = P(win at showdown | both players reach showdown)
+ *
+ * In Leduc:
+ * - Pair > High card > Low card
+ * - Same pair/high card = split
+ */
+/**
+ * Calculate showdown equity for a hand in Round 2.
+ * Equity = P(win at showdown | both players reach showdown)
+ */
+fun calculateEquity(playerCard: Int, boardCard: Int): Double {
+    val playerRank = playerCard / 2  // 0=J, 1=Q, 2=K
+    val boardRank = boardCard / 2
+    val hasPair = (playerRank == boardRank)
+
+    // All possible opponent cards (excluding playerCard and boardCard)
+    val opponentCards = (0..5).filter { it != playerCard && it != boardCard }
+
+    var wins = 0.0
+    var total = 0.0
+
+    for (oppCard in opponentCards) {
+        val oppRank = oppCard / 2
+        val oppHasPair = (oppRank == boardRank)
+
+        val playerScore = if (hasPair) 100 + playerRank else playerRank
+        val oppScore = if (oppHasPair) 100 + oppRank else oppRank
+
+        when {
+            playerScore > oppScore -> wins += 1.0  // Win
+            playerScore == oppScore -> wins += 0.5  // Tie
+            // else: loss, wins += 0.0
+        }
+        total += 1.0
+    }
+
+    return wins / total
+}
+
+/**
+ * Calculate expected value (EV) for a specific hand at a game state.
+ *
+ * Returns EV vs uniform opponent range, averaged over all possible opponent cards.
+ * This generalizes to NLH because it only depends on:
+ * - GameState interface (terminal check, actions, apply action)
+ * - StrategyProfile (to get equilibrium strategies)
+ *
+ * CURRENT APPROACH: Compute EVs on-demand during export
+ * - Simple and sufficient for Leduc
+ * - No extra memory overhead
+ * - EVs computed using final equilibrium strategy
+ *
+ * NLH OPTIMIZATION TODO: Consider pre-computing EVs during solve
+ * - For large NLH blueprints, add a post-training evaluation pass:
+ *   solver.train(rootState, iterations)
+ *   val evMap = solver.evaluateAllInfoSets()  // Store EVs for all info sets
+ * - Benefits: Faster export, enables per-action EV analysis
+ * - Trade-off: Increased memory usage, need to store EVs for all info sets
+ *
+ * @param state Current game state
+ * @param heroCard The card we're computing EV for
+ * @param boardCard The board card (only relevant in Round 2)
+ * @param boardName Board rank name for lookups
+ * @param profile Strategy profile containing equilibrium strategies
+ * @return Expected value in big blinds vs uniform opponent range
+ */
+fun calculateEV(
+    state: LeducWithSuitAbstraction,
+    heroCard: Int,
+    boardCard: Int,
+    boardName: String,
+    profile: StrategyProfile
+): Double {
+    val round = state.round
+
+    // Get all possible opponent cards (exclude heroCard and boardCard in Round 2)
+    val opponentCards = if (round == 2) {
+        (0..5).filter { it != heroCard && it != boardCard }
+    } else {
+        (0..5).filter { it != heroCard }
+    }
+
+    // Average EV over all possible opponent holdings
+    var totalEV = 0.0
+    for (oppCard in opponentCards) {
+        totalEV += calculateEVForMatchup(
+            state = state,
+            p1Card = heroCard,
+            p2Card = oppCard,
+            boardCard = boardCard,
+            boardName = boardName,
+            profile = profile,
+            heroIsP1 = true,
+            visited = mutableSetOf()
+        )
+    }
+
+    return totalEV / opponentCards.size
+}
+
+/**
+ * Calculate EV for a specific card matchup.
+ *
+ * This recursively walks the game tree using equilibrium strategies.
+ */
+private fun calculateEVForMatchup(
+    state: LeducWithSuitAbstraction,
+    p1Card: Int,
+    p2Card: Int,
+    boardCard: Int,
+    boardName: String,
+    profile: StrategyProfile,
+    heroIsP1: Boolean,
+    visited: MutableSet<String>
+): Double {
+    // Terminal node: return payoff
+    if (state.isTerminal()) {
+        // Create a state with actual cards to get proper showdown result
+        val finalState = state.copy(p1Card = p1Card, p2Card = p2Card, boardCard = boardCard)
+        val utilities = finalState.getUtility()
+        return if (heroIsP1) utilities[0] else utilities[1]
+    }
+
+    // Cycle detection
+    val key = "${state.round}:${state.history}:$p1Card:$p2Card"
+    if (key in visited) return 0.0
+    visited.add(key)
+
+    val actions = state.getLegalActions()
+    if (actions.isEmpty()) return 0.0
+
+    val currentPlayer = state.currentPlayer() ?: return 0.0
+    val isHeroTurn = (currentPlayer == 0 && heroIsP1) || (currentPlayer == 1 && !heroIsP1)
+
+    // Get the info set and strategy for the current player
+    val round = state.round
+    val history = state.history.replace("|", "d")
+
+    val activeCard = if (currentPlayer == 0) p1Card else p2Card
+    val activeRank = when(activeCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "Q" }
+
+    val infoSetKey = if (round == 1) {
+        "$activeRank $history"
+    } else {
+        "$activeRank$boardName $history"
+    }
+
+    val strategy = try {
+        profile.getInfoSetStrategy(infoSetKey, actions.size).getAverageStrategy()
+    } catch (e: Exception) {
+        DoubleArray(actions.size) { 1.0 / actions.size }
+    }
+
+    // Check if this action transitions to Round 2
+    val shouldTransition = state.round == 1 && actions.isNotEmpty() &&
+        (state.applyAction(actions[0]) as LeducWithSuitAbstraction).round == 2
+
+    if (shouldTransition) {
+        // Chance node after this decision - average over board outcomes
+        var totalEV = 0.0
+
+        for (i in actions.indices) {
+            val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
+
+            // Average over all possible boards (excluding p1Card and p2Card)
+            var boardEV = 0.0
+            var boardCount = 0
+            for (nextBoard in listOf("J", "Q", "K")) {
+                val nextBoardCard = when(nextBoard) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+
+                // Skip if board is same as either player's card
+                if (nextBoardCard == p1Card || nextBoardCard == p2Card) continue
+
+                val r2State = nextState.copy(boardCard = nextBoardCard)
+                boardEV += calculateEVForMatchup(
+                    r2State, p1Card, p2Card, nextBoardCard, nextBoard,
+                    profile, heroIsP1, visited.toMutableSet()
+                )
+                boardCount++
+            }
+
+            totalEV += strategy[i] * (if (boardCount > 0) boardEV / boardCount else 0.0)
+        }
+
+        return totalEV
+    } else {
+        // Normal decision node - weighted average over actions
+        var totalEV = 0.0
+
+        for (i in actions.indices) {
+            val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
+            val actionEV = calculateEVForMatchup(
+                nextState, p1Card, p2Card, boardCard, boardName,
+                profile, heroIsP1, visited.toMutableSet()
+            )
+            totalEV += strategy[i] * actionEV
+        }
+
+        return totalEV
+    }
+}
+
 fun buildTreeNode(
     state: LeducWithSuitAbstraction,
     boardName: String,
@@ -175,13 +379,17 @@ fun buildTreeNode(
         // Only filter board card in Round 2 (board hasn't been dealt yet in Round 1)
         if (round == 2 && cardIdx == boardCard) continue
 
+        // Convert history: replace | with d to match solver format
         val solverHistory = history.replace("|", "d")
+
         // Round 1: info set is just rank (e.g., "K ")
-        // Round 2: info set is rank-board (e.g., "K-Q ")
+        // Round 2: info set is rank+board WITHOUT dash (e.g., "KQ ")
+        // This matches LeducWithSuitAbstraction.getInfoSet() which uses
+        // getCanonicalHand(...).replace("-", "") in Round 2
         val infoSetKey = if (round == 1) {
             "$rank $solverHistory"
         } else {
-            "$rank-$boardRank $solverHistory"
+            "$rank$boardRank $solverHistory"  // No dash!
         }
 
         val strategy = try {
@@ -190,7 +398,24 @@ fun buildTreeNode(
             DoubleArray(actions.size) { 1.0 / actions.size }
         }
 
+        // Calculate equity (showdown win probability)
+        val equity = if (round == 2) {
+            calculateEquity(cardIdx, boardCard)
+        } else {
+            0.5  // Pre-flop, average across all possible boards
+        }
+
+        // Calculate EV (expected value) for this hand
+        // This does a full tree walk using equilibrium strategy
+        // It generalizes to NLH because it only depends on:
+        // - GameState interface
+        // - StrategyProfile (equilibrium strategies)
+        // - Terminal utilities
+        val evTotal = calculateEV(state, cardIdx, boardCard, boardName, profile)
+
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
+        js.append("equity: ${f(equity)}, ")
+        js.append("evTotal: ${f(evTotal)}, ")
         js.append("freq: {")
         js.append(actionNames.mapIndexed { i, action -> "$action: ${f(strategy[i])}" }.joinToString(", "))
         js.append("} },\n")
