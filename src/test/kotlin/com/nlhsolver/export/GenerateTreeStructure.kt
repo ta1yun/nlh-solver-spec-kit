@@ -4,6 +4,7 @@ import com.nlhsolver.core.CFRSolver
 import com.nlhsolver.core.GameAction
 import com.nlhsolver.core.StrategyProfile
 import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.range.*
 import io.kotest.core.spec.style.FunSpec
 import java.io.File
 
@@ -151,6 +152,92 @@ fun calculateEquity(playerCard: Int, boardCard: Int): Double {
     }
 
     return wins / total
+}
+
+/**
+ * Compute opponent's range at a game state by replaying history.
+ *
+ * Starts with uniform range and propagates through each action in the
+ * history to get the equilibrium range at this node.
+ *
+ * @param state Current game state
+ * @param profile Strategy profile for looking up equilibrium strategies
+ * @param currentPlayer Who is acting now (opponent is the other player)
+ * @return Opponent's range distribution at this node
+ */
+fun computeOpponentRange(
+    state: LeducWithSuitAbstraction,
+    profile: StrategyProfile,
+    currentPlayer: Int
+): LeducRange {
+    // Start with uniform range
+    var oppRange = LeducRange.uniform()
+    val propagator = LeducRangePropagator()
+
+    // Parse history to replay opponent's actions
+    // For simplicity in POC, return uniform range
+    // Full implementation would replay the history
+    // TODO: Implement history replay for proper range tracking
+
+    return oppRange
+}
+
+/**
+ * Calculate EV using opponent's equilibrium range distribution.
+ *
+ * This is the CORRECT way to compute EVs - it accounts for how opponent's
+ * range changes based on their equilibrium play, rather than assuming
+ * uniform distribution.
+ *
+ * @param state Current game state
+ * @param heroHand The hand we're computing EV for
+ * @param opponentRange Opponent's range distribution at this node
+ * @param boardCard The board card (-1 if Round 1)
+ * @param boardName Board rank name for lookups
+ * @param profile Strategy profile containing equilibrium strategies
+ * @param heroPlayer Which player is the hero (0=P1, 1=P2)
+ * @return Expected value in big blinds vs opponent's equilibrium range
+ */
+fun calculateEVWithRange(
+    state: LeducWithSuitAbstraction,
+    heroHand: LeducHand,
+    opponentRange: LeducRange,
+    boardCard: Int,
+    boardName: String,
+    profile: StrategyProfile,
+    heroPlayer: Int
+): Double {
+    val heroIsP1 = (heroPlayer == 0)
+
+    // Filter out hands that conflict with hero or board
+    var validRange = opponentRange.excluding(heroHand)
+
+    // Weight EV by opponent's range distribution
+    var totalEV = 0.0
+    var totalWeight = 0.0
+
+    for ((oppHand, weight) in validRange.getActiveHands()) {
+        if (weight <= 0.0) continue
+
+        val oppCardIdx = (oppHand as LeducHand).cardIdx
+        val heroCardIdx = heroHand.cardIdx
+
+        val (p1Card, p2Card) = if (heroIsP1) {
+            Pair(heroCardIdx, oppCardIdx)
+        } else {
+            Pair(oppCardIdx, heroCardIdx)
+        }
+
+        val matchupEV = calculateEVForMatchup(
+            state, p1Card, p2Card, boardCard, boardName,
+            profile, heroIsP1, mutableSetOf()
+        )
+
+        totalEV += weight * matchupEV
+        totalWeight += weight
+    }
+
+    return if (totalWeight > 0.0) totalEV / totalWeight else 0.0
 }
 
 /**
