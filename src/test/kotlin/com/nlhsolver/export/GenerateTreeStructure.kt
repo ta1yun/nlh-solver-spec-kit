@@ -174,10 +174,61 @@ fun computeOpponentRange(
     var oppRange = LeducRange.uniform()
     val propagator = LeducRangePropagator()
 
+    val opponentPlayer = 1 - currentPlayer
+    val history = state.history
+
     // Parse history to replay opponent's actions
-    // For simplicity in POC, return uniform range
-    // Full implementation would replay the history
-    // TODO: Implement history replay for proper range tracking
+    // History format: "xbc" = check, bet, call
+    // Round separator: "|" or "d"
+    if (history.isEmpty()) {
+        return oppRange  // No actions yet
+    }
+
+    // Split by round separator
+    val rounds = history.split("|", "d")
+
+    // Replay each round
+    var replayState = LeducWithSuitAbstraction(
+        p1Card = 0, p2Card = 2,  // Dummy cards (doesn't matter for range propagation)
+        boardCard = -1,
+        round = 1,
+        p1Invested = 1.0,
+        p2Invested = 1.0,
+        history = ""
+    )
+
+    for ((roundIdx, roundHistory) in rounds.withIndex()) {
+        if (roundHistory.isEmpty()) continue
+
+        // If this is round 2, update board card
+        if (roundIdx == 1) {
+            val boardCard = when(state.boardCard / 2) {
+                0 -> 0; 1 -> 2; 2 -> 4; else -> 2
+            }
+            replayState = replayState.copy(boardCard = boardCard, round = 2)
+        }
+
+        // Replay each action in this round
+        var turnPlayer = 0  // P1 always acts first in each round
+        for (actionChar in roundHistory) {
+            val actionId = actionChar.toString()
+            val actions = replayState.getLegalActions()
+            val action = actions.firstOrNull { it.getActionId() == actionId }
+
+            if (action != null) {
+                // If this action was taken by opponent, propagate their range
+                if (turnPlayer == opponentPlayer) {
+                    oppRange = propagator.propagate(
+                        oppRange, action, replayState, profile
+                    ) as LeducRange
+                }
+
+                // Apply action and update turn
+                replayState = replayState.applyAction(action) as LeducWithSuitAbstraction
+                turnPlayer = 1 - turnPlayer
+            }
+        }
+    }
 
     return oppRange
 }
@@ -617,31 +668,35 @@ fun buildTreeNode(
             0.5  // Pre-flop, average across all possible boards
         }
 
-        // Calculate EV (expected value) for this hand
-        // This does a full tree walk using equilibrium strategy
-        // It generalizes to NLH because it only depends on:
-        // - GameState interface
-        // - StrategyProfile (equilibrium strategies)
-        // - Terminal utilities
-        // Use state.boardCard (which is -1 in Round 1) to ensure proper averaging
-        val evTotal = calculateEV(state, cardIdx, state.boardCard, boardName, profile)
+        // Calculate EV using UNIFORM opponent range (baseline)
+        // This assumes opponent has all hands equally likely
+        val evUniform = calculateEV(state, cardIdx, state.boardCard, boardName, profile)
 
-        // Calculate per-action EV (what happens if we take each specific action)
-        // Need to preserve hero's identity across turn changes
+        // Calculate EV using RANGE-BASED opponent distribution (correct)
+        // This accounts for how opponent's range evolved through their equilibrium play
         val currentPlayer = state.currentPlayer() ?: 0
-        val evPerAction = actions.mapIndexed { i, action ->
+        val opponentRange = computeOpponentRange(state, profile, currentPlayer)
+        val heroHand = LeducHand(cardIdx)
+        val evRange = calculateEVWithRange(
+            state, heroHand, opponentRange,
+            state.boardCard, boardName, profile, currentPlayer
+        )
+
+        // Calculate per-action EV with uniform range
+        val evPerActionUniform = actions.mapIndexed { i, action ->
             val actionEV = calculateEVForAction(state, cardIdx, state.boardCard, boardName, action, profile, currentPlayer)
             actionNames[i] to actionEV
         }
 
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")
-        js.append("evTotal: ${f(evTotal)}, ")
+        js.append("evUniform: ${f(evUniform)}, ")
+        js.append("evRange: ${f(evRange)}, ")
         js.append("freq: {")
         js.append(actionNames.mapIndexed { i, action -> "$action: ${f(strategy[i])}" }.joinToString(", "))
         js.append("}, ")
         js.append("ev: {")
-        js.append(evPerAction.map { (action, ev) -> "$action: ${f(ev)}" }.joinToString(", "))
+        js.append(evPerActionUniform.map { (action, ev) -> "$action: ${f(ev)}" }.joinToString(", "))
         js.append("} },\n")
     }
 
