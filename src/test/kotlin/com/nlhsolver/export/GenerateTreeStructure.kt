@@ -1,6 +1,7 @@
 package com.nlhsolver.export
 
 import com.nlhsolver.core.CFRSolver
+import com.nlhsolver.core.GameAction
 import com.nlhsolver.core.StrategyProfile
 import com.nlhsolver.integration.LeducWithSuitAbstraction
 import io.kotest.core.spec.style.FunSpec
@@ -153,6 +154,51 @@ fun calculateEquity(playerCard: Int, boardCard: Int): Double {
 }
 
 /**
+ * Calculate EV for a specific action.
+ *
+ * Returns the EV if the hero takes this specific action, then follows
+ * equilibrium strategy for the rest of the game.
+ *
+ * IMPORTANT: Must preserve hero's identity across turn changes. When hero
+ * acts, current player changes, but we still need to calculate from hero's
+ * perspective.
+ *
+ * @param state Current game state
+ * @param heroCard The card we're computing EV for
+ * @param boardCard The board card (-1 if Round 1)
+ * @param boardName Board rank name for lookups
+ * @param action The action to evaluate
+ * @param profile Strategy profile containing equilibrium strategies
+ * @param heroPlayer Which player is the hero (0=P1, 1=P2)
+ * @return Expected value in big blinds if this action is taken
+ */
+fun calculateEVForAction(
+    state: LeducWithSuitAbstraction,
+    heroCard: Int,
+    boardCard: Int,
+    boardName: String,
+    action: GameAction,
+    profile: StrategyProfile,
+    heroPlayer: Int
+): Double {
+    // Apply the action to get next state
+    val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+
+    // Handle board card for round transitions
+    // If we're transitioning from R1 to R2, nextState.boardCard might be stale
+    // Use -1 to signal we should average over all boards
+    val nextBoardCard = if (state.round == 1 && nextState.round == 2) {
+        -1  // Transition to R2 - average over all boards
+    } else {
+        nextState.boardCard
+    }
+
+    // Calculate EV from next state following equilibrium
+    // Use explicit heroPlayer to preserve perspective across turn changes
+    return calculateEVWithHero(nextState, heroCard, nextBoardCard, boardName, profile, heroPlayer)
+}
+
+/**
  * Calculate expected value (EV) for a specific hand at a game state.
  *
  * Returns EV vs uniform opponent range, averaged over all possible opponent cards.
@@ -186,13 +232,24 @@ fun calculateEV(
     boardName: String,
     profile: StrategyProfile
 ): Double {
-    val round = state.round
-
-    // Determine which player is the hero (whose EV we're calculating)
-    // This is critical: P1 decision nodes should calculate from P1's perspective,
-    // P2 decision nodes from P2's perspective
+    // Determine which player is the hero from current turn
     val currentPlayer = state.currentPlayer() ?: 0
-    val heroIsP1 = (currentPlayer == 0)
+    return calculateEVWithHero(state, heroCard, boardCard, boardName, profile, currentPlayer)
+}
+
+/**
+ * Calculate EV with explicit hero player (to preserve perspective across turn changes).
+ */
+fun calculateEVWithHero(
+    state: LeducWithSuitAbstraction,
+    heroCard: Int,
+    boardCard: Int,
+    boardName: String,
+    profile: StrategyProfile,
+    heroPlayer: Int
+): Double {
+    val round = state.round
+    val heroIsP1 = (heroPlayer == 0)
 
     // In Round 1, boardCard is -1 (not dealt yet) - average over all possible boards
     // In Round 2, use the specific board
@@ -482,11 +539,22 @@ fun buildTreeNode(
         // Use state.boardCard (which is -1 in Round 1) to ensure proper averaging
         val evTotal = calculateEV(state, cardIdx, state.boardCard, boardName, profile)
 
+        // Calculate per-action EV (what happens if we take each specific action)
+        // Need to preserve hero's identity across turn changes
+        val currentPlayer = state.currentPlayer() ?: 0
+        val evPerAction = actions.mapIndexed { i, action ->
+            val actionEV = calculateEVForAction(state, cardIdx, state.boardCard, boardName, action, profile, currentPlayer)
+            actionNames[i] to actionEV
+        }
+
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")
         js.append("evTotal: ${f(evTotal)}, ")
         js.append("freq: {")
         js.append(actionNames.mapIndexed { i, action -> "$action: ${f(strategy[i])}" }.joinToString(", "))
+        js.append("}, ")
+        js.append("ev: {")
+        js.append(evPerAction.map { (action, ev) -> "$action: ${f(ev)}" }.joinToString(", "))
         js.append("} },\n")
     }
 
