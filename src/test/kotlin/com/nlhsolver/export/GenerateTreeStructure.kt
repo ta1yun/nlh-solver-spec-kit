@@ -34,7 +34,7 @@ class GenerateTreeStructure : FunSpec({
             val initialState = LeducWithSuitAbstraction(
                 p1Card = 1, // Sample card
                 p2Card = 3,
-                boardCard = boardCard,
+                boardCard = -1, // Board not dealt yet in Round 1
                 round = 1,
                 p1Invested = 1.0,
                 p2Invested = 1.0,
@@ -188,29 +188,65 @@ fun calculateEV(
 ): Double {
     val round = state.round
 
-    // Get all possible opponent cards (exclude heroCard and boardCard in Round 2)
-    val opponentCards = if (round == 2) {
-        (0..5).filter { it != heroCard && it != boardCard }
+    // In Round 1, boardCard is -1 (not dealt yet) - average over all possible boards
+    // In Round 2, use the specific board
+    if (round == 1 && boardCard == -1) {
+        // Average over all possible board outcomes
+        var totalEV = 0.0
+        var boardCount = 0
+
+        for (board in listOf("J", "Q", "K")) {
+            val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+
+            // Skip if board would be same as hero's card
+            if (bCard == heroCard) continue
+
+            // Get all possible opponent cards (exclude heroCard and this board)
+            val opponentCards = (0..5).filter { it != heroCard && it != bCard }
+
+            var boardEV = 0.0
+            for (oppCard in opponentCards) {
+                boardEV += calculateEVForMatchup(
+                    state = state,
+                    p1Card = heroCard,
+                    p2Card = oppCard,
+                    boardCard = bCard,
+                    boardName = board,
+                    profile = profile,
+                    heroIsP1 = true,
+                    visited = mutableSetOf()
+                )
+            }
+
+            totalEV += boardEV / opponentCards.size
+            boardCount++
+        }
+
+        return totalEV / boardCount
     } else {
-        (0..5).filter { it != heroCard }
-    }
+        // Round 2 or specific board - average over opponent holdings
+        val opponentCards = if (round == 2) {
+            (0..5).filter { it != heroCard && it != boardCard }
+        } else {
+            (0..5).filter { it != heroCard }
+        }
 
-    // Average EV over all possible opponent holdings
-    var totalEV = 0.0
-    for (oppCard in opponentCards) {
-        totalEV += calculateEVForMatchup(
-            state = state,
-            p1Card = heroCard,
-            p2Card = oppCard,
-            boardCard = boardCard,
-            boardName = boardName,
-            profile = profile,
-            heroIsP1 = true,
-            visited = mutableSetOf()
-        )
-    }
+        var totalEV = 0.0
+        for (oppCard in opponentCards) {
+            totalEV += calculateEVForMatchup(
+                state = state,
+                p1Card = heroCard,
+                p2Card = oppCard,
+                boardCard = boardCard,
+                boardName = boardName,
+                profile = profile,
+                heroIsP1 = true,
+                visited = mutableSetOf()
+            )
+        }
 
-    return totalEV / opponentCards.size
+        return totalEV / opponentCards.size
+    }
 }
 
 /**
@@ -411,7 +447,8 @@ fun buildTreeNode(
         // - GameState interface
         // - StrategyProfile (equilibrium strategies)
         // - Terminal utilities
-        val evTotal = calculateEV(state, cardIdx, boardCard, boardName, profile)
+        // Use state.boardCard (which is -1 in Round 1) to ensure proper averaging
+        val evTotal = calculateEV(state, cardIdx, state.boardCard, boardName, profile)
 
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")
