@@ -195,14 +195,19 @@ fun calculateEV(
         var totalEV = 0.0
         var boardCount = 0
 
+        val heroRank = heroCard / 2  // 0=J, 1=Q, 2=K
+
         for (board in listOf("J", "Q", "K")) {
             val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+            val boardRank = bCard / 2
 
-            // Skip if board would be same as hero's card
-            if (bCard == heroCard) continue
+            // Skip if board rank matches hero's rank (suit abstraction)
+            if (boardRank == heroRank) continue
 
-            // Get all possible opponent cards (exclude heroCard and this board)
-            val opponentCards = (0..5).filter { it != heroCard && it != bCard }
+            // Get all possible opponent cards (exclude hero's rank and board rank)
+            val opponentCards = (0..5).filter {
+                it / 2 != heroRank && it / 2 != boardRank
+            }
 
             var boardEV = 0.0
             for (oppCard in opponentCards) {
@@ -225,10 +230,13 @@ fun calculateEV(
         return totalEV / boardCount
     } else {
         // Round 2 or specific board - average over opponent holdings
+        val heroRank = heroCard / 2
         val opponentCards = if (round == 2) {
-            (0..5).filter { it != heroCard && it != boardCard }
+            val boardRank = boardCard / 2
+            // Exclude opponent cards with same rank as hero or board (suit abstraction)
+            (0..5).filter { it / 2 != heroRank && it / 2 != boardRank }
         } else {
-            (0..5).filter { it != heroCard }
+            (0..5).filter { it / 2 != heroRank }
         }
 
         var totalEV = 0.0
@@ -313,14 +321,18 @@ private fun calculateEVForMatchup(
         for (i in actions.indices) {
             val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
 
-            // Average over all possible boards (excluding p1Card and p2Card)
+            // Average over all possible boards (excluding ranks held by players)
             var boardEV = 0.0
             var boardCount = 0
+            val p1Rank = p1Card / 2
+            val p2Rank = p2Card / 2
+
             for (nextBoard in listOf("J", "Q", "K")) {
                 val nextBoardCard = when(nextBoard) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+                val nextBoardRank = nextBoardCard / 2
 
-                // Skip if board is same as either player's card
-                if (nextBoardCard == p1Card || nextBoardCard == p2Card) continue
+                // Skip if board rank matches either player's rank (suit abstraction)
+                if (nextBoardRank == p1Rank || nextBoardRank == p2Rank) continue
 
                 val r2State = nextState.copy(boardCard = nextBoardCard)
                 boardEV += calculateEVForMatchup(
