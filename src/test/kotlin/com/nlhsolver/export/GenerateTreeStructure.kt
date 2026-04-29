@@ -188,6 +188,12 @@ fun calculateEV(
 ): Double {
     val round = state.round
 
+    // Determine which player is the hero (whose EV we're calculating)
+    // This is critical: P1 decision nodes should calculate from P1's perspective,
+    // P2 decision nodes from P2's perspective
+    val currentPlayer = state.currentPlayer() ?: 0
+    val heroIsP1 = (currentPlayer == 0)
+
     // In Round 1, boardCard is -1 (not dealt yet) - average over all possible boards
     // In Round 2, use the specific board
     if (round == 1 && boardCard == -1) {
@@ -211,14 +217,21 @@ fun calculateEV(
 
             var boardEV = 0.0
             for (oppCard in opponentCards) {
+                // Assign hero/opponent based on current player
+                val (p1Card, p2Card) = if (heroIsP1) {
+                    Pair(heroCard, oppCard)
+                } else {
+                    Pair(oppCard, heroCard)
+                }
+
                 boardEV += calculateEVForMatchup(
                     state = state,
-                    p1Card = heroCard,
-                    p2Card = oppCard,
+                    p1Card = p1Card,
+                    p2Card = p2Card,
                     boardCard = bCard,
                     boardName = board,
                     profile = profile,
-                    heroIsP1 = true,
+                    heroIsP1 = heroIsP1,
                     visited = mutableSetOf()
                 )
             }
@@ -241,14 +254,21 @@ fun calculateEV(
 
         var totalEV = 0.0
         for (oppCard in opponentCards) {
+            // Assign hero/opponent based on current player
+            val (p1Card, p2Card) = if (heroIsP1) {
+                Pair(heroCard, oppCard)
+            } else {
+                Pair(oppCard, heroCard)
+            }
+
             totalEV += calculateEVForMatchup(
                 state = state,
-                p1Card = heroCard,
-                p2Card = oppCard,
+                p1Card = p1Card,
+                p2Card = p2Card,
                 boardCard = boardCard,
                 boardName = boardName,
                 profile = profile,
-                heroIsP1 = true,
+                heroIsP1 = heroIsP1,
                 visited = mutableSetOf()
             )
         }
