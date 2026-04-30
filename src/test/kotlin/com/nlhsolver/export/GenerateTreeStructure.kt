@@ -261,17 +261,16 @@ fun calculateEVWithRange(
     val round = state.round
     val heroIsP1 = (heroPlayer == 0)
 
-    // Round 1: average over all possible boards (same logic as calculateEVWithHero)
+    // Round 1: average over all possible boards (all 6 cards)
     if (round == 1 && boardCard == -1) {
         var totalEV = 0.0
         var boardCount = 0
 
-        for (board in listOf("J", "Q", "K")) {
-            val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-            val boardRank = bCard / 2
+        for (bCard in 0..5) {
+            // Skip impossible scenario where board card is same as hero card
+            if (bCard == heroHand.cardIdx) continue
 
-            // Skip if board rank matches hero's rank
-            if (boardRank == heroHand.rank) continue
+            val board = when(bCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "?" }
 
             // Filter opponent range: exclude hero hand AND board card
             val boardHand = LeducHand(bCard)
@@ -447,12 +446,15 @@ fun calculateEVWithHero(
     // In Round 1, boardCard is -1 (not dealt yet) - average over all possible boards
     // In Round 2, use the specific board
     if (round == 1 && boardCard == -1) {
-        // Average over all possible board outcomes
+        // Average over all possible board outcomes (all 6 cards)
         var totalEV = 0.0
         var boardCount = 0
 
-        for (board in listOf("J", "Q", "K")) {
-            val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+        for (bCard in 0..5) {
+            // Skip impossible scenario where board card is same as hero card
+            if (bCard == heroCard) continue
+
+            val board = when(bCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "?" }
 
             // Get all possible opponent cards (exclude only specific dealt cards)
             val opponentCards = (0..5).filter {
