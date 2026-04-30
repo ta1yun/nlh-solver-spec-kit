@@ -117,7 +117,8 @@ function buildLeducTree() {
         strategies[h.id] = {
           freq: { ...h.freq },
           equity: h.equity ?? 0.5,
-          evTotal: h.evTotal ?? 0,
+          evTotal: h.evUniform ?? h.evTotal ?? 0,  // evUniform from new data, fallback to evTotal for compatibility
+          evRange: h.evRange ?? h.evUniform ?? h.evTotal ?? 0,  // range-based EV
           ev: h.ev || {},
         };
       }
@@ -267,8 +268,9 @@ function LeducTiles({ strategy, ...cellProps }) {
         {strategy.hands.map(h => (
           <div key={h.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
             <LeducCard hand={h} {...cellProps} />
-            <div style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.4)' }}>
-              EV {h.evTotal >= 0 ? '+' : ''}{h.evTotal.toFixed(2)}
+            <div style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:9, color:'rgba(255,255,255,0.4)', textAlign:'center', lineHeight:1.4 }}>
+              <div>U: {h.evTotal >= 0 ? '+' : ''}{h.evTotal.toFixed(2)}</div>
+              <div>R: {h.evRange >= 0 ? '+' : ''}{h.evRange.toFixed(2)}</div>
             </div>
           </div>
         ))}
@@ -441,15 +443,21 @@ function DetailPanel({ hand, strategy }) {
       <div style={{ padding:16, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
         <div style={{ fontSize:14, fontWeight:600, marginBottom:12, color:'#fff' }}>{hand.label || hand.id}</div>
 
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14, fontSize:11 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:14, fontSize:11 }}>
           <div>
             <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EQUITY</div>
             <div style={{ color:'#fff', fontFamily:'"JetBrains Mono", monospace' }}>{(hand.equity*100).toFixed(1)}%</div>
           </div>
           <div>
-            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV</div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV (UNI)</div>
             <div style={{ color: hand.evTotal >= 0 ? '#86efac' : '#fca5a5', fontFamily:'"JetBrains Mono", monospace' }}>
-              {hand.evTotal >= 0 ? '+' : ''}{hand.evTotal.toFixed(2)} BB
+              {hand.evTotal >= 0 ? '+' : ''}{hand.evTotal.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV (RNG)</div>
+            <div style={{ color: hand.evRange >= 0 ? '#86efac' : '#fca5a5', fontFamily:'"JetBrains Mono", monospace' }}>
+              {hand.evRange >= 0 ? '+' : ''}{hand.evRange.toFixed(2)}
             </div>
           </div>
         </div>
@@ -790,10 +798,17 @@ function App() {
                     </span>
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between' }}>
-                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV</span>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV (uni)</span>
                     <span style={{ fontFamily:'"JetBrains Mono", monospace', color: strategy.hands.reduce((s,h)=>s+h.evTotal,0) >= 0 ? '#86efac' : '#fca5a5' }}>
                       {((strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length) >= 0 ? '+' : '')}
                       {(strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length).toFixed(2)} BB
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV (rng)</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color: strategy.hands.reduce((s,h)=>s+h.evRange,0) >= 0 ? '#86efac' : '#fca5a5' }}>
+                      {((strategy.hands.reduce((s,h)=>s+h.evRange,0)/strategy.hands.length) >= 0 ? '+' : '')}
+                      {(strategy.hands.reduce((s,h)=>s+h.evRange,0)/strategy.hands.length).toFixed(2)} BB
                     </span>
                   </div>
                 </div>
