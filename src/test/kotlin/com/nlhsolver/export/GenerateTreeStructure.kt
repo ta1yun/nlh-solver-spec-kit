@@ -694,8 +694,8 @@ fun buildTreeNode(
         Triple("Qa", "Q", 2), Triple("Qb", "Q", 3),
         Triple("Ja", "J", 0), Triple("Jb", "J", 1)
     )) {
-        // Filter all cards of same rank as board in Round 2 (suit abstraction)
-        if (round == 2 && cardIdx / 2 == boardCard / 2) continue
+        // Only filter board card in Round 2 (board hasn't been dealt yet in Round 1)
+        if (round == 2 && cardIdx == boardCard) continue
 
         // Convert history: replace | with d to match solver format
         val solverHistory = history.replace("|", "d")
