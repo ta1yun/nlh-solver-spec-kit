@@ -258,10 +258,65 @@ fun calculateEVWithRange(
     profile: StrategyProfile,
     heroPlayer: Int
 ): Double {
+    val round = state.round
     val heroIsP1 = (heroPlayer == 0)
 
+    // Round 1: average over all possible boards (same logic as calculateEVWithHero)
+    if (round == 1 && boardCard == -1) {
+        var totalEV = 0.0
+        var boardCount = 0
+
+        for (board in listOf("J", "Q", "K")) {
+            val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+            val boardRank = bCard / 2
+
+            // Skip if board rank matches hero's rank
+            if (boardRank == heroHand.rank) continue
+
+            // Filter opponent range: exclude hero hand AND board card
+            val boardHand = LeducHand(bCard)
+            var validRange = opponentRange.excluding(heroHand).excluding(boardHand) as LeducRange
+
+            var boardEV = 0.0
+            var boardWeight = 0.0
+
+            for ((oppHand, weight) in validRange.getActiveHands()) {
+                if (weight <= 0.0) continue
+
+                val oppCardIdx = (oppHand as LeducHand).cardIdx
+                val heroCardIdx = heroHand.cardIdx
+
+                val (p1Card, p2Card) = if (heroIsP1) {
+                    Pair(heroCardIdx, oppCardIdx)
+                } else {
+                    Pair(oppCardIdx, heroCardIdx)
+                }
+
+                val matchupEV = calculateEVForMatchup(
+                    state, p1Card, p2Card, bCard, board,
+                    profile, heroIsP1, mutableSetOf()
+                )
+
+                boardEV += weight * matchupEV
+                boardWeight += weight
+            }
+
+            if (boardWeight > 0.0) {
+                totalEV += boardEV / boardWeight
+                boardCount++
+            }
+        }
+
+        return if (boardCount > 0) totalEV / boardCount else 0.0
+    }
+
+    // Round 2: direct calculation with known board
     // Filter out hands that conflict with hero or board
     var validRange = opponentRange.excluding(heroHand)
+    if (boardCard >= 0) {
+        val boardHand = LeducHand(boardCard)
+        validRange = validRange.excluding(boardHand) as LeducRange
+    }
 
     // Weight EV by opponent's range distribution
     var totalEV = 0.0

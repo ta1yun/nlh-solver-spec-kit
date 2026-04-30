@@ -39,6 +39,13 @@ class LeducRangePropagator : RangePropagator {
 
         val newWeights = mutableMapOf<Int, Double>()
 
+        // Debug: print action being propagated
+        val debug = false // Set to true for debugging
+        if (debug) {
+            println("Propagating through action: ${action.getActionId()} (index $actionIndex)")
+            println("Available actions: ${actions.map { it.getActionId() }}")
+        }
+
         // For each hand in the current range
         for ((hand, weight) in currentRange.getActiveHands()) {
             if (weight <= 0.0) continue
@@ -57,6 +64,9 @@ class LeducRangePropagator : RangePropagator {
 
             // New weight = old weight × frequency of taking this action
             val actionFreq = strategy[actionIndex]
+            if (debug && leducHand.rank == 2) { // Debug K only
+                println("  K: infoSet='$infoSet', strategy=${strategy.joinToString(",") { "%.2f".format(it) }}, actionFreq=$actionFreq")
+            }
             newWeights[leducHand.cardIdx] = weight * actionFreq
         }
 
