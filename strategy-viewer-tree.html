@@ -68,8 +68,74 @@
   .hand-name {
     font-size: 1.5rem;
     font-weight: 700;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     color: #f59e0b;
+  }
+
+  .ev-section {
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    background: rgba(0,0,0,0.3);
+    border-radius: 6px;
+  }
+
+  .ev-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .ev-item {
+    text-align: center;
+  }
+
+  .ev-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 0.25rem;
+  }
+
+  .ev-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .ev-value.positive { color: #22c55e; }
+  .ev-value.negative { color: #e5484d; }
+  .ev-value.neutral { color: #8b8d98; }
+
+  .ev-comparison {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(168, 85, 247, 0.1);
+    border-left: 3px solid #a855f7;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  .ev-diff {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+  }
+
+  .ev-diff.large { color: #f59e0b; }
+  .ev-diff.medium { color: #60a5fa; }
+  .ev-diff.small { color: rgba(255,255,255,0.6); }
+
+  .per-action-ev {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+    margin-left: auto;
   }
 
   .freq-row {
@@ -268,9 +334,20 @@ function App() {
   const board = meta.board || [];
 
   const handleAction = (action) => {
+    console.log('Action clicked:', action);
+    console.log('Current node has children:', Object.keys(currentNode.children || {}));
+    console.log('Next node:', currentNode.children?.[action]);
+
+    const nextNode = currentNode.children?.[action];
+    if (!nextNode) {
+      console.error('No child node for action:', action);
+      alert(`Error: No continuation for action "${action}". This is a bug - the tree should have this path.`);
+      return;
+    }
+
     const currentPlayer = history.filter(h => h.type === 'action').length % 2 === 0 ? 'P1' : 'P2';
     setHistory([...history, { type: 'action', player: currentPlayer, action }]);
-    setCurrentNode(currentNode.children[action]);
+    setCurrentNode(nextNode);
   };
 
   const reset = () => {
@@ -330,25 +407,80 @@ function App() {
           </div>
 
           <div className="section-title">Optimal Strategy</div>
-          {currentNode.hands?.map(hand => (
-            <div key={hand.id} className="hand-card">
-              <div className="hand-name">{hand.label}</div>
-              {Object.entries(hand.freq).map(([action, freq]) => (
-                <div key={action} className="freq-row">
-                  <div className="freq-label">{action}</div>
-                  <div className="freq-value">{(freq * 100).toFixed(1)}%</div>
-                  <div className="freq-bar-bg">
-                    <div className="freq-bar-fill"
-                      style={{
-                        width: `${freq * 100}%`,
-                        background: actionColors[action] || '#8b8d98'
-                      }}>
+          {currentNode.hands?.map(hand => {
+            const evDiff = Math.abs((hand.evRange || 0) - (hand.evUniform || 0));
+            const diffClass = evDiff > 5 ? 'large' : evDiff > 2 ? 'medium' : 'small';
+
+            const getEVClass = (ev) => {
+              if (ev > 0.5) return 'positive';
+              if (ev < -0.5) return 'negative';
+              return 'neutral';
+            };
+
+            return (
+              <div key={hand.id} className="hand-card">
+                <div className="hand-name">{hand.label}</div>
+
+                <div className="ev-section">
+                  <div className="ev-grid">
+                    <div className="ev-item">
+                      <div className="ev-label">Equity</div>
+                      <div className="ev-value">
+                        {((hand.equity || 0) * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="ev-item">
+                      <div className="ev-label">EV (Uniform)</div>
+                      <div className={`ev-value ${getEVClass(hand.evUniform)}`}>
+                        {(hand.evUniform || 0).toFixed(2)} BB
+                      </div>
+                    </div>
+                    <div className="ev-item">
+                      <div className="ev-label">EV (Range)</div>
+                      <div className={`ev-value ${getEVClass(hand.evRange)}`}>
+                        {(hand.evRange || 0).toFixed(2)} BB
+                      </div>
                     </div>
                   </div>
+
+                  {evDiff > 0.5 && (
+                    <div className="ev-comparison">
+                      <span>⚠️ Range-based EV differs by</span>
+                      <span className={`ev-diff ${diffClass}`}>
+                        {evDiff.toFixed(2)} BB
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
+                        ({evDiff > 5 ? 'major' : evDiff > 2 ? 'moderate' : 'minor'} impact)
+                      </span>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          ))}
+
+                <div className="section-title" style={{ fontSize: '0.7rem', marginTop: '1rem' }}>
+                  Action Frequencies
+                </div>
+                {Object.entries(hand.freq).map(([action, freq]) => (
+                  <div key={action} className="freq-row">
+                    <div className="freq-label">{action}</div>
+                    <div className="freq-value">{(freq * 100).toFixed(1)}%</div>
+                    <div className="freq-bar-bg">
+                      <div className="freq-bar-fill"
+                        style={{
+                          width: `${freq * 100}%`,
+                          background: actionColors[action] || '#8b8d98'
+                        }}>
+                      </div>
+                    </div>
+                    {hand.ev && hand.ev[action] !== undefined && (
+                      <div className="per-action-ev">
+                        EV: {hand.ev[action].toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

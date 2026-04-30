@@ -26,6 +26,11 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * Supports both synchronous (blocking) and asynchronous execution.
  * Uses structured logging for observability.
+ *
+ * IMPORTANT: Multi-matchup blueprint solves automatically use NO abstraction
+ * (AbstractionMode.NONE) regardless of configuration. Equity bucketing causes
+ * massive info set collisions that prevent CFR convergence in multi-matchup
+ * scenarios. See CHANGELOG.md (2026-04-13) for detailed analysis.
  */
 class SolveOrchestrator(
     private val strategyExtractor: StrategyExtractor = StrategyExtractor(),
@@ -106,8 +111,23 @@ class SolveOrchestrator(
         // Determine effective abstraction mode based on range sizes
         val btnRangeSize = (configuration.btnRange as? HandRange.WeightedRange)?.size() ?: 169
         val bbRangeSize = (configuration.bbRange as? HandRange.WeightedRange)?.size() ?: 169
-        val effectiveMode = configuration.handAbstraction.effectiveMode(btnRangeSize, bbRangeSize)
+        val requestedMode = configuration.handAbstraction.effectiveMode(btnRangeSize, bbRangeSize)
         val numBuckets = configuration.handAbstraction.numBuckets
+
+        // CRITICAL: Multi-matchup blueprint solves MUST use NO abstraction
+        // Equity bucketing causes massive info set collisions that prevent CFR convergence
+        // (see CHANGELOG.md - 2026-04-13 - Equity Bucketing Incompatible with Multi-Matchup Solves)
+        val effectiveMode = if (allMatchups.size > 1 && requestedMode == AbstractionMode.EQUITY_BUCKETING) {
+            logger.warn("Overriding abstraction mode for multi-matchup solve",
+                "requested" to requestedMode.name,
+                "effective" to "NONE",
+                "reason" to "Equity bucketing causes bucket collisions in multi-matchup solves",
+                "matchups" to allMatchups.size
+            )
+            AbstractionMode.NONE
+        } else {
+            requestedMode
+        }
 
         // Create root states with weight information for each matchup
         data class WeightedRootState(
@@ -167,7 +187,13 @@ class SolveOrchestrator(
             "matchups" to allMatchups.size,
             "totalWeight" to String.format("%.2f", totalWeight),
             "pot" to configuration.pot,
-            "abstraction" to if (effectiveMode == AbstractionMode.EQUITY_BUCKETING) "${effectiveMode.name} ($numBuckets buckets)" else effectiveMode.name
+            "abstraction" to if (effectiveMode == AbstractionMode.EQUITY_BUCKETING) {
+                "${effectiveMode.name} ($numBuckets buckets)"
+            } else if (effectiveMode == AbstractionMode.NONE && allMatchups.size > 1) {
+                "${effectiveMode.name} (required for multi-matchup convergence)"
+            } else {
+                effectiveMode.name
+            }
         )
 
         if (effectiveConfig.board != configuration.board && configuration.board.isNotEmpty()) {

@@ -79,16 +79,17 @@ class MultiMatchupExternalSamplingTest : FunSpec({
             return weightedMatchups.last()
         }
 
-        // Check convergence at different iterations
+        // Check convergence at different iterations using ONE solver
         val checkpoints = listOf(1_000, 5_000, 10_000, 20_000)
+        var lastCheckpoint = 0
 
-        for (totalIterations in checkpoints) {
-            val testSolver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
+        for (checkpoint in checkpoints) {
+            val iterationsToRun = checkpoint - lastCheckpoint
 
             // External sampling: sample ONE matchup per iteration
-            for (iter in 1..totalIterations) {
+            for (iter in 1..iterationsToRun) {
                 val sampled = sampleMatchup()
-                testSolver.train(sampled.state, iterations = 1)
+                solver.train(sampled.state, iterations = 1)
             }
 
             // Calculate average exploitability
@@ -96,22 +97,19 @@ class MultiMatchupExternalSamplingTest : FunSpec({
             for (matchup in weightedMatchups) {
                 val exploit = exploitCalc.calculateExploitability(
                     matchup.state,
-                    testSolver.getStrategyProfile()
+                    solver.getStrategyProfile()
                 )
                 totalExploit += exploit * matchup.weight
             }
             val avgExploit = totalExploit
             val avgExploitPct = (avgExploit / 3.0) * 100
 
-            println("Iterations: ${"%,6d".format(totalIterations)}, Avg Exploitability: ${String.format("%6.2f%%", avgExploitPct)} (${String.format("%.4f", avgExploit)} chips)")
+            println("Iterations: ${"%,6d".format(checkpoint)}, Avg Exploitability: ${String.format("%6.2f%%", avgExploitPct)} (${String.format("%.4f", avgExploit)} chips)")
+
+            lastCheckpoint = checkpoint
         }
 
-        // Final test
-        for (iter in 1..20_000) {
-            val sampled = sampleMatchup()
-            solver.train(sampled.state, iterations = 1)
-        }
-
+        // Calculate final exploitability (already at 20k iterations)
         var totalExploit = 0.0
         for (matchup in weightedMatchups) {
             val exploit = exploitCalc.calculateExploitability(

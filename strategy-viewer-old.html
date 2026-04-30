@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NLH Solver — Strategy Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#06070a; color:#fff; font-family: 'Inter', system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  ::selection { background: rgba(34,197,94,0.4); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- Load complete Leduc export with all 108 scenarios -->
+<script src="leduc-complete.js"></script>
+
+<script type="text/babel">
+const { useState, useMemo, useEffect } = React;
+
+// Build complete game tree from our solver data
+function buildLeducTree() {
+  const ACT = {
+    fold:  { id:'fold',  label:'Fold',  color:'#e5484d' },
+    check: { id:'check', label:'Check', color:'#8b8d98' },
+    call:  { id:'call',  label:'Call',  color:'#3b82f6' },
+    bet:   { id:'bet',   label:'Bet',   color:'#f59e0b' },
+    raise: { id:'raise', label:'Raise', color:'#22c55e' },
+  };
+
+  const SCENARIOS = window.LEDUC_COMPLETE;
+  if (!SCENARIOS) {
+    console.error('LEDUC_COMPLETE not loaded! Make sure leduc-complete.js is in the same directory.');
+    return null;
+  }
+  console.log('✓ Loaded', Object.keys(SCENARIOS).length, 'scenarios');
+
+  // Get strategies from complete export (using Q board scenarios as templates)
+  const r1_p1_first = SCENARIOS.r1_q_; // P1 first to act (root)
+  const r1_p2_facing_bet = SCENARIOS.r1_q_b; // P2 facing P1's bet
+  const r1_p1_facing_raise = SCENARIOS.r1_q_br; // P1 facing P2's raise after bet
+
+  const nodes = {};
+
+  // Helper: convert hands array to strategies object
+  function handsToStrategies(scenario) {
+    const strat = {};
+    for (const h of scenario.hands) {
+      strat[h.id] = {
+        freq: { ...h.freq },
+        equity: h.equity ?? 0.5,  // Default to 50% if not provided
+        evTotal: h.evTotal ?? 0,   // Default to 0 if not provided
+        ev: h.ev || {},
+      };
+    }
+    return strat;
+  }
+
+  // Helper: get scenario from complete export
+  function getScenario(scenarioId) {
+    return SCENARIOS[scenarioId] || null;
+  }
+
+  // ROOT: P1 first to act
+  nodes['root'] = {
+    id:'root', kind:'decision', round:1, player:'P1',
+    label:'Round 1 — P1 to act',
+    pot:2, toCall:0,
+    strategies: handsToStrategies(r1_p1_first),
+    actions: r1_p1_first.actions,
+    children: { check:'p1_check', bet:'p1_bet' },
+  };
+
+  // P1 bet → P2 facing bet
+  nodes['p1_bet'] = {
+    id:'p1_bet', kind:'decision', round:1, player:'P2',
+    label:'Round 1 — P2 facing P1 bet',
+    pot:4, toCall:2,
+    strategies: handsToStrategies(r1_p2_facing_bet),
+    actions: r1_p2_facing_bet.actions,
+    children: { fold:'p2_folds', call:'p2_called', raise:'p2_raised' },
+  };
+
+  nodes['p2_folds'] = { id:'p2_folds', kind:'terminal', label:'P2 folds — P1 wins pot of 4' };
+
+  // P2 called → board comes
+  nodes['p2_called'] = {
+    id:'p2_called', kind:'chance',
+    label:'P2 calls — deal board (pot 6)',
+    children: [
+      {label:'K♠', card:{rank:'K',suit:'♠',id:'Ka'}, nodeId:'r2_called_K'},
+      {label:'Q♠', card:{rank:'Q',suit:'♠',id:'Qa'}, nodeId:'r2_called_Q'},
+      {label:'J♠', card:{rank:'J',suit:'♠',id:'Ja'}, nodeId:'r2_called_J'},
+    ],
+  };
+
+  // P2 raised → P1 facing raise
+  nodes['p2_raised'] = {
+    id:'p2_raised', kind:'decision', round:1, player:'P1',
+    label:'Round 1 — P1 facing P2 raise',
+    pot:8, toCall:2,
+    strategies: handsToStrategies(r1_p1_facing_raise),
+    actions: r1_p1_facing_raise.actions,
+    children: { fold:'p1_folds', call:'r1_capped' },
+  };
+
+  nodes['p1_folds'] = { id:'p1_folds', kind:'terminal', label:'P1 folds — P2 wins pot of 8' };
+
+  nodes['r1_capped'] = {
+    id:'r1_capped', kind:'chance',
+    label:'Round 1 capped — deal board',
+    children: [
+      {label:'K♠', nodeId:'r2_capped_K'},
+      {label:'Q♠', nodeId:'r2_capped_Q'},
+      {label:'J♠', nodeId:'r2_capped_J'},
+    ],
+  };
+
+  // Get R1 scenarios for check path
+  const r1_p2_after_check = SCENARIOS.r1_q_x; // P2 after P1 check
+  const r1_p1_facing_xb = SCENARIOS.r1_q_xb; // P1 facing bet after check
+
+  // P1 check → P2 to act
+  nodes['p1_check'] = {
+    id:'p1_check', kind:'decision', round:1, player:'P2',
+    label:'Round 1 — P2 after P1 check',
+    pot:2, toCall:0,
+    strategies: handsToStrategies(r1_p2_after_check),
+    actions: r1_p2_after_check.actions,
+    children: { check:'r1_both_check', bet:'p2_bet_after_check' },
+  };
+
+  nodes['r1_both_check'] = {
+    id:'r1_both_check', kind:'chance',
+    label:'Both check — deal board',
+    children: [
+      {label:'K♠', nodeId:'r2_check_K'},
+      {label:'Q♠', nodeId:'r2_check_Q'},
+      {label:'J♠', nodeId:'r2_check_J'},
+    ],
+  };
+
+  nodes['p2_bet_after_check'] = {
+    id:'p2_bet_after_check', kind:'decision', round:1, player:'P1',
+    label:'Round 1 — P1 facing P2 bet (after check)',
+    pot:4, toCall:2,
+    strategies: handsToStrategies(r1_p1_facing_xb),
+    actions: r1_p1_facing_xb.actions,
+    children: { fold:'p1_folds_r1', call:'p1_called_p2bet', raise:'p1_raised_p2bet' },
+  };
+
+  nodes['p1_folds_r1'] = { id:'p1_folds_r1', kind:'terminal', label:'P1 folds — P2 wins pot of 4' };
+
+  nodes['p1_called_p2bet'] = {
+    id:'p1_called_p2bet', kind:'chance',
+    label:'P1 calls P2 bet — deal board',
+    children: [
+      {label:'K♠', nodeId:'r2_p1called_K'},
+      {label:'Q♠', nodeId:'r2_p1called_Q'},
+      {label:'J♠', nodeId:'r2_p1called_J'},
+    ],
+  };
+
+  // Get scenario for P2 facing raise after check-bet-raise
+  const r1_p2_facing_xbr = SCENARIOS.r1_q_xbr;
+
+  // P1 raised P2's bet → P2 facing raise
+  nodes['p1_raised_p2bet'] = {
+    id:'p1_raised_p2bet', kind:'decision', round:1, player:'P2',
+    label:'Round 1 — P2 facing P1 raise (after check-bet-raise)',
+    pot:8, toCall:2,
+    strategies: handsToStrategies(r1_p2_facing_xbr),
+    actions: r1_p2_facing_xbr.actions,
+    children: { fold:'p2_folds_to_raise', call:'r1_capped_xbr' },
+  };
+
+  nodes['p2_folds_to_raise'] = { id:'p2_folds_to_raise', kind:'terminal', label:'P2 folds to raise — P1 wins pot of 8' };
+
+  nodes['r1_capped_xbr'] = {
+    id:'r1_capped_xbr', kind:'chance',
+    label:'Round 1 capped (check-bet-raise-call) — deal board',
+    children: [
+      {label:'K♠', nodeId:'r2_capped_xbr_K'},
+      {label:'Q♠', nodeId:'r2_capped_xbr_Q'},
+      {label:'J♠', nodeId:'r2_capped_xbr_J'},
+    ],
+  };
+
+  // Round 2 nodes - use conditional strategies if available
+  for (const bid of ['K', 'Q', 'J']) {
+    const boardName = `${bid}♠`;
+
+    // R2 after P1 bet, P2 call (pot 6) - P1 to act
+    const r2_called = getScenario(`r2_${bid.toLowerCase()}_bc_`);
+    if (r2_called) {
+      nodes[`r2_called_${bid}`] = {
+        id:`r2_called_${bid}`, kind:'decision', round:2, player:'P1',
+        label:`Round 2 — board ${boardName} — P1 to act (after bet-call R1)`,
+        pot:6, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_called),
+        actions: r2_called.actions,
+        children: { check:`r2_called_${bid}_check`, bet:`r2_called_${bid}_bet` },
+      };
+
+      nodes[`r2_called_${bid}_check`] = {
+        id:`r2_called_${bid}_check`, kind:'terminal',
+        label:`Both check — showdown (board ${boardName})`,
+      };
+
+      // P2 facing P1's bet in Round 2
+      const r2_facing_bet = getScenario(`r2_${bid.toLowerCase()}_bc_b`);
+      if (r2_facing_bet) {
+        nodes[`r2_called_${bid}_bet`] = {
+          id:`r2_called_${bid}_bet`, kind:'decision', round:2, player:'P2',
+          label:`Round 2 — board ${boardName} — P2 facing bet`,
+          pot:10, toCall:4, board:[boardName],
+          strategies: handsToStrategies(r2_facing_bet),
+          actions: r2_facing_bet.actions,
+          children: { fold:`r2_p2_folds_${bid}`, call:`r2_p2_calls_${bid}`, raise:`r2_p2_raises_${bid}` },
+        };
+
+        nodes[`r2_p2_folds_${bid}`] = {
+          id:`r2_p2_folds_${bid}`, kind:'terminal',
+          label:`P2 folds — P1 wins pot of 10 (board ${boardName})`,
+        };
+
+        nodes[`r2_p2_calls_${bid}`] = {
+          id:`r2_p2_calls_${bid}`, kind:'terminal',
+          label:`P2 calls — showdown (board ${boardName})`,
+        };
+
+        // P1 facing P2's raise in Round 2
+        const r2_facing_raise = getScenario(`r2_${bid.toLowerCase()}_bc_br`);
+        if (r2_facing_raise) {
+          nodes[`r2_p2_raises_${bid}`] = {
+            id:`r2_p2_raises_${bid}`, kind:'decision', round:2, player:'P1',
+            label:`Round 2 — board ${boardName} — P1 facing raise`,
+            pot:18, toCall:4, board:[boardName],
+            strategies: handsToStrategies(r2_facing_raise),
+            actions: r2_facing_raise.actions,
+            children: { fold:`r2_p1_folds_raise_${bid}`, call:`r2_p1_calls_raise_${bid}` },
+          };
+
+          nodes[`r2_p1_folds_raise_${bid}`] = {
+            id:`r2_p1_folds_raise_${bid}`, kind:'terminal',
+            label:`P1 folds to raise — P2 wins pot of 18 (board ${boardName})`,
+          };
+
+          nodes[`r2_p1_calls_raise_${bid}`] = {
+            id:`r2_p1_calls_raise_${bid}`, kind:'terminal',
+            label:`P1 calls raise — showdown, pot of 18 (board ${boardName})`,
+          };
+        } else {
+          nodes[`r2_p2_raises_${bid}`] = {
+            id:`r2_p2_raises_${bid}`, kind:'terminal',
+            label:`P2 raises — P1 to act (no strategy data)`,
+          };
+        }
+      } else {
+        nodes[`r2_called_${bid}_bet`] = {
+          id:`r2_called_${bid}_bet`, kind:'terminal',
+          label:`P1 bets — P2 to act (board ${boardName}) (no strategy data)`,
+        };
+      }
+    } else {
+      nodes[`r2_called_${bid}`] = {
+        id:`r2_called_${bid}`, kind:'terminal',
+        label:`Round 2 — board ${boardName} (no strategy data)`,
+      };
+    }
+
+    // R2 after P1 bet, P2 raise, P1 call (pot 8) — P1 to act
+    const r2_brcd = getScenario(`r2_${bid.toLowerCase()}_brc_`);
+    if (r2_brcd) {
+      nodes[`r2_capped_${bid}`] = {
+        id:`r2_capped_${bid}`, kind:'decision', round:2, player:'P1',
+        label:`Round 2 — board ${boardName} — P1 to act (after bet-raise-call R1)`,
+        pot:8, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_brcd),
+        actions: r2_brcd.actions,
+        children: { check:`r2_capped_${bid}_check`, bet:`r2_capped_${bid}_bet` },
+      };
+    } else {
+      nodes[`r2_capped_${bid}`] = {
+        id:`r2_capped_${bid}`, kind:'terminal',
+        label:`Round 2 — board ${boardName} capped preflop (no data)`,
+      };
+    }
+
+    // R2 after both check in R1 (pot 2) — P1 to act
+    const r2_xxd = getScenario(`r2_${bid.toLowerCase()}_xx_`);
+    if (r2_xxd) {
+      nodes[`r2_check_${bid}`] = {
+        id:`r2_check_${bid}`, kind:'decision', round:2, player:'P1',
+        label:`Round 2 — board ${boardName} — P1 to act (both checked R1)`,
+        pot:2, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_xxd),
+        actions: r2_xxd.actions,
+        children: { check:`r2_check_${bid}_check`, bet:`r2_check_${bid}_bet` },
+      };
+    } else {
+      nodes[`r2_check_${bid}`] = {
+        id:`r2_check_${bid}`, kind:'terminal',
+        label:`Round 2 — board ${boardName} after checks (no data)`,
+      };
+    }
+
+    // R2 after P1 check, P2 bet, P1 call (pot 6) — P1 to act first in R2
+    const r2_xbcd = getScenario(`r2_${bid.toLowerCase()}_xbc_`);
+    if (r2_xbcd) {
+      nodes[`r2_p1called_${bid}`] = {
+        id:`r2_p1called_${bid}`, kind:'decision', round:2, player:'P1',
+        label:`Round 2 — board ${boardName} — P1 to act (after check-bet-call R1)`,
+        pot:6, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_xbcd),
+        actions: r2_xbcd.actions,
+        children: { check:`r2_p1called_${bid}_check`, bet:`r2_p1called_${bid}_bet` },
+      };
+    } else {
+      nodes[`r2_p1called_${bid}`] = {
+        id:`r2_p1called_${bid}`, kind:'terminal',
+        label:`Round 2 — board ${boardName} after P1 called P2 bet (no data)`,
+      };
+    }
+
+    // R2 after P1 check, P2 bet, P1 raise, P2 call (pot 8) — P1 to act (NOT P2!)
+    const r2_xbrcd = getScenario(`r2_${bid.toLowerCase()}_xbrc_`);
+    if (r2_xbrcd) {
+      nodes[`r2_capped_xbr_${bid}`] = {
+        id:`r2_capped_xbr_${bid}`, kind:'decision', round:2, player:'P1',
+        label:`Round 2 — board ${boardName} — P1 to act (after check-bet-raise-call R1)`,
+        pot:8, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_xbrcd),
+        actions: r2_xbrcd.actions,
+        children: { check:`r2_capped_xbr_${bid}_check`, bet:`r2_capped_xbr_${bid}_bet` },
+      };
+    } else {
+      nodes[`r2_capped_xbr_${bid}`] = {
+        id:`r2_capped_xbr_${bid}`, kind:'terminal',
+        label:`Round 2 — board ${boardName} after xbrc (no data)`,
+      };
+    }
+  }
+
+  // Add terminal/continuation nodes for all R2 scenarios
+  for (const bid of ['K', 'Q', 'J']) {
+    const boardName = `${bid}♠`;
+
+    // r2_check terminals (after both check R1, P1 acts)
+    nodes[`r2_check_${bid}_check`] = { id:`r2_check_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+
+    // After P1 bets (xx|b), P2 acts
+    const r2_xx_b = getScenario(`r2_${bid.toLowerCase()}_xx_b`);
+    if (r2_xx_b) {
+      nodes[`r2_check_${bid}_bet`] = {
+        id:`r2_check_${bid}_bet`, kind:'decision', round:2, player:'P2',
+        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
+        pot:6, toCall:4, board:[boardName],
+        strategies: handsToStrategies(r2_xx_b),
+        actions: r2_xx_b.actions,
+        children: { fold:`r2_check_${bid}_bet_fold`, call:`r2_check_${bid}_bet_call`, raise:`r2_check_${bid}_bet_raise` },
+      };
+      nodes[`r2_check_${bid}_bet_fold`] = { id:`r2_check_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
+      nodes[`r2_check_${bid}_bet_call`] = { id:`r2_check_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
+      nodes[`r2_check_${bid}_bet_raise`] = { id:`r2_check_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
+    } else {
+      nodes[`r2_check_${bid}_bet`] = { id:`r2_check_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
+    }
+
+    // r2_capped terminals (after bet-raise-call R1, P1 acts)
+    nodes[`r2_capped_${bid}_check`] = { id:`r2_capped_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+
+    // After P1 bets (brc|b), P2 acts
+    const r2_brc_b = getScenario(`r2_${bid.toLowerCase()}_brc_b`);
+    if (r2_brc_b) {
+      nodes[`r2_capped_${bid}_bet`] = {
+        id:`r2_capped_${bid}_bet`, kind:'decision', round:2, player:'P2',
+        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
+        pot:12, toCall:4, board:[boardName],
+        strategies: handsToStrategies(r2_brc_b),
+        actions: r2_brc_b.actions,
+        children: { fold:`r2_capped_${bid}_bet_fold`, call:`r2_capped_${bid}_bet_call`, raise:`r2_capped_${bid}_bet_raise` },
+      };
+      nodes[`r2_capped_${bid}_bet_fold`] = { id:`r2_capped_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
+      nodes[`r2_capped_${bid}_bet_call`] = { id:`r2_capped_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
+      nodes[`r2_capped_${bid}_bet_raise`] = { id:`r2_capped_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
+    } else {
+      nodes[`r2_capped_${bid}_bet`] = { id:`r2_capped_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
+    }
+
+    // r2_p1called continuations (after P1 acts in R2)
+    const r2_xbc_x = getScenario(`r2_${bid.toLowerCase()}_xbc_x`);
+    if (r2_xbc_x) {
+      // After P1 checks, P2 acts
+      nodes[`r2_p1called_${bid}_check`] = {
+        id:`r2_p1called_${bid}_check`, kind:'decision', round:2, player:'P2',
+        label:`Round 2 — board ${boardName} — P2 to act (P1 checked)`,
+        pot:6, toCall:0, board:[boardName],
+        strategies: handsToStrategies(r2_xbc_x),
+        actions: r2_xbc_x.actions,
+        children: { check:`r2_p1called_${bid}_check_check`, bet:`r2_p1called_${bid}_check_bet` },
+      };
+      nodes[`r2_p1called_${bid}_check_check`] = { id:`r2_p1called_${bid}_check_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+
+      // After P1 check, P2 bet → P1 to act (NOT terminal!)
+      const r2_xbc_xb = getScenario(`r2_${bid.toLowerCase()}_xbc_xb`);
+      if (r2_xbc_xb) {
+        nodes[`r2_p1called_${bid}_check_bet`] = {
+          id:`r2_p1called_${bid}_check_bet`, kind:'decision', round:2, player:'P1',
+          label:`Round 2 — board ${boardName} — P1 facing P2's bet`,
+          pot:10, toCall:4, board:[boardName],
+          strategies: handsToStrategies(r2_xbc_xb),
+          actions: r2_xbc_xb.actions,
+          children: { fold:`r2_p1called_${bid}_check_bet_fold`, call:`r2_p1called_${bid}_check_bet_call`, raise:`r2_p1called_${bid}_check_bet_raise` },
+        };
+        nodes[`r2_p1called_${bid}_check_bet_fold`] = { id:`r2_p1called_${bid}_check_bet_fold`, kind:'terminal', label:`P1 folds — P2 wins pot of 10 (board ${boardName})` };
+        nodes[`r2_p1called_${bid}_check_bet_call`] = { id:`r2_p1called_${bid}_check_bet_call`, kind:'terminal', label:`P1 calls — showdown (board ${boardName})` };
+
+        // After P1 raises, P2 to act (NOT terminal!)
+        const r2_xbc_xbr = getScenario(`r2_${bid.toLowerCase()}_xbc_xbr`);
+        if (r2_xbc_xbr) {
+          nodes[`r2_p1called_${bid}_check_bet_raise`] = {
+            id:`r2_p1called_${bid}_check_bet_raise`, kind:'decision', round:2, player:'P2',
+            label:`Round 2 — board ${boardName} — P2 facing P1's raise`,
+            pot:18, toCall:4, board:[boardName],
+            strategies: handsToStrategies(r2_xbc_xbr),
+            actions: r2_xbc_xbr.actions,
+            children: { fold:`r2_p1called_${bid}_check_bet_raise_fold`, call:`r2_p1called_${bid}_check_bet_raise_call` },
+          };
+          nodes[`r2_p1called_${bid}_check_bet_raise_fold`] = { id:`r2_p1called_${bid}_check_bet_raise_fold`, kind:'terminal', label:`P2 folds — P1 wins pot of 18 (board ${boardName})` };
+          nodes[`r2_p1called_${bid}_check_bet_raise_call`] = { id:`r2_p1called_${bid}_check_bet_raise_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
+        } else {
+          nodes[`r2_p1called_${bid}_check_bet_raise`] = { id:`r2_p1called_${bid}_check_bet_raise`, kind:'terminal', label:`P1 raises — P2 to act (no data)` };
+        }
+      } else {
+        nodes[`r2_p1called_${bid}_check_bet`] = { id:`r2_p1called_${bid}_check_bet`, kind:'terminal', label:`P2 bet, P1 to act (no data)` };
+      }
+    } else {
+      nodes[`r2_p1called_${bid}_check`] = { id:`r2_p1called_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+    }
+
+    // After P1 bets in R2, P2 acts (NOT terminal!)
+    const r2_xbc_b = getScenario(`r2_${bid.toLowerCase()}_xbc_b`);
+    if (r2_xbc_b) {
+      nodes[`r2_p1called_${bid}_bet`] = {
+        id:`r2_p1called_${bid}_bet`, kind:'decision', round:2, player:'P2',
+        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
+        pot:10, toCall:4, board:[boardName],
+        strategies: handsToStrategies(r2_xbc_b),
+        actions: r2_xbc_b.actions,
+        children: { fold:`r2_p1called_${bid}_bet_fold`, call:`r2_p1called_${bid}_bet_call`, raise:`r2_p1called_${bid}_bet_raise` },
+      };
+      nodes[`r2_p1called_${bid}_bet_fold`] = { id:`r2_p1called_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins pot of 10 (board ${boardName})` };
+      nodes[`r2_p1called_${bid}_bet_call`] = { id:`r2_p1called_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
+
+      // After P2 raises, P1 to act (NOT terminal!)
+      const r2_xbc_br = getScenario(`r2_${bid.toLowerCase()}_xbc_br`);
+      if (r2_xbc_br) {
+        nodes[`r2_p1called_${bid}_bet_raise`] = {
+          id:`r2_p1called_${bid}_bet_raise`, kind:'decision', round:2, player:'P1',
+          label:`Round 2 — board ${boardName} — P1 facing P2's raise`,
+          pot:18, toCall:4, board:[boardName],
+          strategies: handsToStrategies(r2_xbc_br),
+          actions: r2_xbc_br.actions,
+          children: { fold:`r2_p1called_${bid}_bet_raise_fold`, call:`r2_p1called_${bid}_bet_raise_call` },
+        };
+        nodes[`r2_p1called_${bid}_bet_raise_fold`] = { id:`r2_p1called_${bid}_bet_raise_fold`, kind:'terminal', label:`P1 folds — P2 wins pot of 18 (board ${boardName})` };
+        nodes[`r2_p1called_${bid}_bet_raise_call`] = { id:`r2_p1called_${bid}_bet_raise_call`, kind:'terminal', label:`P1 calls — showdown (board ${boardName})` };
+      } else {
+        nodes[`r2_p1called_${bid}_bet_raise`] = { id:`r2_p1called_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (no data)` };
+      }
+    } else {
+      nodes[`r2_p1called_${bid}_bet`] = { id:`r2_p1called_${bid}_bet`, kind:'terminal', label:`P1 bet, P2 to act (no data)` };
+    }
+
+    // r2_capped_xbr terminals (after check-bet-raise-call R1, P1 acts in R2)
+    nodes[`r2_capped_xbr_${bid}_check`] = { id:`r2_capped_xbr_${bid}_check`, kind:'terminal', label:`Both check — showdown (board ${boardName})` };
+
+    // After P1 bets (xbrc|b), P2 acts
+    const r2_xbrc_b = getScenario(`r2_${bid.toLowerCase()}_xbrc_b`);
+    if (r2_xbrc_b) {
+      nodes[`r2_capped_xbr_${bid}_bet`] = {
+        id:`r2_capped_xbr_${bid}_bet`, kind:'decision', round:2, player:'P2',
+        label:`Round 2 — board ${boardName} — P2 facing P1's bet`,
+        pot:12, toCall:4, board:[boardName],
+        strategies: handsToStrategies(r2_xbrc_b),
+        actions: r2_xbrc_b.actions,
+        children: { fold:`r2_capped_xbr_${bid}_bet_fold`, call:`r2_capped_xbr_${bid}_bet_call`, raise:`r2_capped_xbr_${bid}_bet_raise` },
+      };
+      nodes[`r2_capped_xbr_${bid}_bet_fold`] = { id:`r2_capped_xbr_${bid}_bet_fold`, kind:'terminal', label:`P2 folds — P1 wins (board ${boardName})` };
+      nodes[`r2_capped_xbr_${bid}_bet_call`] = { id:`r2_capped_xbr_${bid}_bet_call`, kind:'terminal', label:`P2 calls — showdown (board ${boardName})` };
+      nodes[`r2_capped_xbr_${bid}_bet_raise`] = { id:`r2_capped_xbr_${bid}_bet_raise`, kind:'terminal', label:`P2 raises — P1 to act (board ${boardName})` };
+    } else {
+      nodes[`r2_capped_xbr_${bid}_bet`] = { id:`r2_capped_xbr_${bid}_bet`, kind:'terminal', label:`P1 bets, P2 to act (no data)` };
+    }
+  }
+
+  function nodeToStrategy(nodeId) {
+    const node = nodes[nodeId];
+    if (!node || node.kind !== 'decision') return null;
+
+    const cardMeta = {
+      Ka:{rank:'K',suit:'♠'}, Kb:{rank:'K',suit:'♥'},
+      Qa:{rank:'Q',suit:'♠'}, Qb:{rank:'Q',suit:'♥'},
+      Ja:{rank:'J',suit:'♠'}, Jb:{rank:'J',suit:'♥'},
+    };
+
+    const hands = Object.entries(node.strategies).map(([id, s]) => ({
+      id, label: cardMeta[id].rank + cardMeta[id].suit,
+      rank: cardMeta[id].rank, suit: cardMeta[id].suit,
+      combos:1, ...s,
+    }));
+
+    return {
+      game:'leduc', handShape:'tile',
+      meta:{
+        street:'round'+node.round, pot:node.pot, toCall:node.toCall,
+        stack:10-node.pot, position:node.player, board:[],
+      },
+      actions: node.actions, hands,
+      nodeId, label:node.label,
+    };
+  }
+
+  function boardRankOf(nodeId) {
+    const m = (nodeId || '').match(/^r2_[a-z]+_([KQJ])$/);
+    return m ? m[1] : null;
+  }
+
+  function swapBoard(nodeId, targetRank) {
+    if (!nodeId) return null;
+    const re = /^(r2_[a-z]+_)([KQJ])$/;
+    const m = nodeId.match(re);
+    if (!m) return null;
+    const cand = m[1] + targetRank;
+    return nodes[cand] ? cand : null;
+  }
+
+  return { nodes, root:'root', nodeToStrategy, ACT, boardRankOf, swapBoard };
+}
+
+// ============================================================
+// Components
+// ============================================================
+
+function LeducCard({ hand, actions, visibleActions, selected, hovered, onHover, onClick }) {
+  const acts = actions.filter(a => visibleActions[a.id]);
+  const total = acts.reduce((s,a)=>s+(hand.freq[a.id]||0),0)||1;
+  const isRed = hand.suit === '♥' || hand.suit === '♦';
+
+  return (
+    <div
+      onMouseEnter={()=>onHover&&onHover(hand)}
+      onMouseLeave={()=>onHover&&onHover(null)}
+      onClick={()=>onClick&&onClick(hand)}
+      style={{
+        position:'relative', width:90, height:128, borderRadius:8, cursor:'pointer',
+        background:'#fff',
+        border: selected ? '2px solid #fff' : hovered ? '2px solid rgba(255,255,255,0.45)' : '2px solid transparent',
+        boxShadow: selected ? '0 0 0 3px rgba(255,255,255,0.15), 0 8px 22px rgba(0,0,0,0.45)' : '0 6px 16px rgba(0,0,0,0.35)',
+        overflow:'hidden',
+        transition:'transform 140ms, border-color 140ms',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+      }}>
+      <div style={{ position:'absolute', top:8, left:10, fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
+      <div style={{ position:'absolute', top:26, left:11, fontFamily:'Inter, sans-serif', fontSize:14, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.suit}</div>
+      <div style={{ position:'absolute', bottom:8, right:10, transform:'rotate(180deg)', fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
+      <div style={{ position:'absolute', left:0, right:0, bottom:0, height:18, display:'flex' }}>
+        {acts.map(a => {
+          const f = (hand.freq[a.id]||0)/total;
+          if (f <= 0.001) return null;
+          return <div key={a.id} style={{ width: (f*100)+'%', background:a.color }}/>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LeducTiles({ strategy, ...cellProps }) {
+  return (
+    <div style={{ padding:24, borderRadius:6, background:'#0a0b0f', border:'1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.5)', marginBottom:12, letterSpacing:'0.06em' }}>HERO HOLDING</div>
+      <div style={{ display:'flex', gap:14 }}>
+        {strategy.hands.map(h => (
+          <div key={h.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+            <LeducCard hand={h} {...cellProps} />
+            <div style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.4)' }}>
+              EV {h.evTotal >= 0 ? '+' : ''}{h.evTotal.toFixed(2)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GameTreePlayer({ history, currentNode, onAction, onChance, onReset, onUndo, onJump }) {
+  return (
+    <div style={{
+      background:'#0a0b0f',
+      border:'1px solid rgba(255,255,255,0.06)',
+      borderRadius:6,
+      padding:'14px 16px',
+      marginBottom:18,
+    }}>
+      {/* Breadcrumb */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+        <span style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em' }}>
+          LINE
+        </span>
+        <button onClick={() => onJump(0)} style={crumbBtn(history.length === 0)}>start</button>
+        {history.map((h, i) => (
+          <React.Fragment key={i}>
+            <span style={{ color:'rgba(255,255,255,0.25)', fontSize:11 }}>›</span>
+            <button onClick={() => onJump(i+1)} style={{
+              ...crumbBtn(i === history.length - 1),
+              borderLeft: '2px solid ' + (h.color || 'rgba(255,255,255,0.2)'),
+            }}>
+              <span style={{ color:'rgba(255,255,255,0.45)', marginRight:6, fontSize:10 }}>{h.player || ''}</span>
+              {h.label}
+            </button>
+          </React.Fragment>
+        ))}
+        <div style={{ flex:1 }}/>
+        {history.length > 0 && (
+          <>
+            <button onClick={onUndo} style={iconBtn}>↶ Undo</button>
+            <button onClick={onReset} style={iconBtn}>Reset</button>
+          </>
+        )}
+      </div>
+
+      {/* Current node */}
+      <NodeFooter currentNode={currentNode} onAction={onAction} onChance={onChance} />
+    </div>
+  );
+}
+
+function NodeFooter({ currentNode, onAction, onChance }) {
+  if (!currentNode) return null;
+
+  if (currentNode.kind === 'terminal') {
+    return (
+      <div style={{
+        display:'flex', alignItems:'center', gap:12,
+        padding:'10px 12px', borderRadius:5,
+        background:'rgba(134, 239, 172, 0.06)',
+        border:'1px solid rgba(134, 239, 172, 0.2)',
+      }}>
+        <div style={{ width:8, height:8, borderRadius:'50%', background:'#86efac' }}/>
+        <div style={{ fontSize:12, color:'#fff' }}>{currentNode.label}</div>
+      </div>
+    );
+  }
+
+  if (currentNode.kind === 'chance') {
+    return (
+      <div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', marginBottom:8 }}>
+          {currentNode.label}
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          {currentNode.children.map((c, i) => (
+            <button key={i} onClick={() => onChance(c)} style={{
+              padding:'8px 14px', borderRadius:5,
+              background:'#fff', color:'#0a0a0a',
+              border:'2px solid transparent', cursor:'pointer',
+              fontFamily:'Inter, sans-serif', fontWeight:600, fontSize:13,
+            }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // decision
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+        <PlayerBadge player={currentNode.player}/>
+        <div style={{ fontSize:13, color:'#fff', fontWeight:500 }}>{currentNode.label}</div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:14, fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.45)' }}>
+          <span>POT {currentNode.pot}</span>
+          {currentNode.toCall > 0 && <span>TO CALL {currentNode.toCall}</span>}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        {currentNode.actions.map(a => (
+          <button key={a.id} onClick={() => onAction(a, currentNode)} style={{
+            padding:'8px 16px', borderRadius:5,
+            background: a.color, color:'#fff',
+            border:'none', cursor:'pointer',
+            fontFamily:'Inter, sans-serif', fontWeight:600, fontSize:12,
+            boxShadow:'0 1px 0 rgba(255,255,255,0.1) inset, 0 1px 2px rgba(0,0,0,0.3)',
+          }}>{a.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PlayerBadge = ({ player }) => {
+  const isHero = player === 'P1';
+  return (
+    <div style={{
+      display:'inline-flex', alignItems:'center', gap:5,
+      padding:'2px 7px', borderRadius:3,
+      background: isHero ? 'rgba(163, 230, 53, 0.15)' : 'rgba(252, 165, 165, 0.12)',
+      border: '1px solid ' + (isHero ? 'rgba(163, 230, 53, 0.3)' : 'rgba(252, 165, 165, 0.25)'),
+    }}>
+      <div style={{
+        width:5, height:5, borderRadius:'50%',
+        background: isHero ? '#a3e635' : '#fca5a5',
+      }}/>
+      <span style={{
+        fontFamily:'"JetBrains Mono", monospace', fontSize:10,
+        color: isHero ? '#a3e635' : '#fca5a5',
+      }}>{player}</span>
+    </div>
+  );
+};
+
+const crumbBtn = (active) => ({
+  padding:'4px 9px', borderRadius:3,
+  background: active ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.025)',
+  color: active ? '#fff' : 'rgba(255,255,255,0.65)',
+  border:'1px solid ' + (active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)'),
+  cursor:'pointer',
+  fontFamily:'Inter, sans-serif', fontSize:11,
+});
+
+const iconBtn = {
+  padding:'4px 9px', borderRadius:3,
+  background:'transparent',
+  color:'rgba(255,255,255,0.55)',
+  border:'1px solid rgba(255,255,255,0.08)',
+  cursor:'pointer',
+  fontFamily:'Inter, sans-serif', fontSize:11,
+};
+
+function DetailPanel({ hand, strategy }) {
+  if (!hand) {
+    return (
+      <div>
+        <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>DETAILS</div>
+        <div style={{ padding:16, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11, color:'rgba(255,255,255,0.5)', lineHeight:1.6 }}>
+          Hover or click a hand to inspect.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>HAND DETAIL</div>
+      <div style={{ padding:16, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
+        <div style={{ fontSize:14, fontWeight:600, marginBottom:12, color:'#fff' }}>{hand.label || hand.id}</div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14, fontSize:11 }}>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EQUITY</div>
+            <div style={{ color:'#fff', fontFamily:'"JetBrains Mono", monospace' }}>{(hand.equity*100).toFixed(1)}%</div>
+          </div>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV</div>
+            <div style={{ color: hand.evTotal >= 0 ? '#86efac' : '#fca5a5', fontFamily:'"JetBrains Mono", monospace' }}>
+              {hand.evTotal >= 0 ? '+' : ''}{hand.evTotal.toFixed(2)} BB
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop:14 }}>
+          <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:8 }}>STRATEGY</div>
+          {strategy.actions.map(a => {
+            const freq = hand.freq[a.id] || 0;
+            const ev = hand.ev && hand.ev[a.id] !== undefined ? hand.ev[a.id] : null;
+            if (freq < 0.001) return null;
+            return (
+              <div key={a.id} style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, fontSize:10 }}>
+                  <span style={{ color:'rgba(255,255,255,0.75)' }}>{a.label}</span>
+                  <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.6)' }}>{(freq*100).toFixed(0)}%</span>
+                </div>
+                <div style={{ height:6, background:'rgba(255,255,255,0.06)', borderRadius:3, overflow:'hidden' }}>
+                  <div style={{ width:(freq*100)+'%', height:'100%', background:a.color }}/>
+                </div>
+                {ev !== null && (
+                  <div style={{ fontSize:9, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.45)', marginTop:2 }}>
+                    EV: {ev >= 0 ? '+' : ''}{ev.toFixed(2)} BB
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionLegend({ actions, visibleActions, setVisible }) {
+  return (
+    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+      {actions.map(a => (
+        <button
+          key={a.id}
+          onClick={() => setVisible({ ...visibleActions, [a.id]: !visibleActions[a.id] })}
+          style={{
+            padding:'5px 10px',
+            borderRadius:4,
+            background: visibleActions[a.id] ? a.color : 'rgba(255,255,255,0.05)',
+            color: visibleActions[a.id] ? '#fff' : 'rgba(255,255,255,0.35)',
+            border:'1px solid ' + (visibleActions[a.id] ? a.color : 'rgba(255,255,255,0.08)'),
+            cursor:'pointer',
+            fontFamily:'Inter, sans-serif',
+            fontSize:11,
+            fontWeight:500,
+            opacity: visibleActions[a.id] ? 1 : 0.5,
+          }}>
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BoardPicker({ currentRank, onPickRank, TREE, currentNodeId, setCurrentNodeId, history, setHistory }) {
+  const isR2 = currentRank !== null;
+  const ranks = ['K', 'Q', 'J'];
+
+  if (!isR2) {
+    return (
+      <div>
+        <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>BOARD</div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>
+          No board yet (Round 1)
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>BOARD</div>
+      <div style={{ display:'flex', gap:6 }}>
+        {ranks.map(r => (
+          <button
+            key={r}
+            onClick={() => {
+              const next = TREE.swapBoard(currentNodeId, r);
+              if (next) {
+                setCurrentNodeId(next);
+                if (history.length > 0) {
+                  setHistory(h => [
+                    ...h.slice(0, -1),
+                    { ...h[h.length-1], label: r + '♠', nodeId: next },
+                  ]);
+                }
+              }
+            }}
+            style={{
+              padding:'6px 10px',
+              borderRadius:4,
+              background: r === currentRank ? '#fff' : 'rgba(255,255,255,0.06)',
+              color: r === currentRank ? '#0a0a0a' : 'rgba(255,255,255,0.65)',
+              border: r === currentRank ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+              cursor:'pointer',
+              fontFamily:'Inter, sans-serif',
+              fontSize:12,
+              fontWeight:600,
+            }}>
+            {r}♠
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Main App
+// ============================================================
+
+function App() {
+  const TREE = useMemo(() => buildLeducTree(), []);
+
+  // Show error if tree didn't load
+  if (!TREE) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ background: '#1a1a1a', border: '2px solid #ef4444', borderRadius: '8px', padding: '1.5rem' }}>
+          <h2 style={{ color: '#ef4444', marginBottom: '1rem' }}>Error: Game Tree Not Loaded</h2>
+          <p style={{ color: '#ccc', lineHeight: 1.6 }}>
+            The Leduc Hold'em scenarios could not be loaded. Make sure <code style={{background: '#0a0a0a', padding: '2px 6px', borderRadius: '3px'}}>leduc-complete.js</code> is in the same directory as this HTML file.
+          </p>
+          <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '1rem' }}>
+            Check the browser console (F12) for more details.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const [history, setHistory] = useState([]);
+  const [currentNodeId, setCurrentNodeId] = useState(TREE ? TREE.root : null);
+  const currentNode = TREE && currentNodeId ? TREE.nodes[currentNodeId] : null;
+
+  const strategy = useMemo(() => {
+    if (!TREE || !currentNode || currentNode.kind !== 'decision') return null;
+    return TREE.nodeToStrategy(currentNodeId);
+  }, [currentNodeId]);
+
+  const [hovered, setHovered] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [visibleActions, setVisibleActions] = useState({});
+
+  // Initialize visible actions when strategy changes
+  useEffect(() => {
+    if (!strategy) { setVisibleActions({}); return; }
+    const v = {};
+    for (const a of strategy.actions) v[a.id] = true;
+    setVisibleActions(v);
+    setHovered(null);
+    setSelected(null);
+  }, [currentNodeId]);
+
+  // Tree handlers
+  const playAction = (action, node) => {
+    const next = node.children[action.id];
+    setHistory(h => [...h, { player: node.player, label: action.label, color: action.color, nodeId: next }]);
+    setCurrentNodeId(next);
+  };
+
+  const playChance = (choice) => {
+    setHistory(h => [...h, { player: 'CHANCE', label: choice.label, color: 'rgba(255,255,255,0.3)', nodeId: choice.nodeId }]);
+    setCurrentNodeId(choice.nodeId);
+  };
+
+  const undoMove = () => {
+    if (history.length === 0) return;
+    const nh = history.slice(0, -1);
+    setHistory(nh);
+    setCurrentNodeId(nh.length === 0 ? TREE.root : nh[nh.length-1].nodeId);
+  };
+
+  const resetTree = () => {
+    setHistory([]);
+    setCurrentNodeId(TREE.root);
+  };
+
+  const jumpTo = (idx) => {
+    if (idx === 0) { setHistory([]); setCurrentNodeId(TREE.root); return; }
+    const nh = history.slice(0, idx);
+    setHistory(nh);
+    setCurrentNodeId(nh[nh.length-1].nodeId);
+  };
+
+  if (!TREE) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20 }}>
+        <div style={{ fontSize:16, color:'rgba(255,255,255,0.6)' }}>
+          No solver data loaded. Please load leduc-solution.js
+        </div>
+      </div>
+    );
+  }
+
+  const cellProps = strategy ? {
+    actions: strategy.actions,
+    visibleActions,
+    weighted: false,
+    selected,
+    hovered,
+    onHover: setHovered,
+    onClick: (h) => setSelected(selected && selected.id === h.id ? null : h),
+  } : null;
+
+  const focused = hovered || selected;
+  const showRange = !!strategy;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#06070a', color:'#fff', fontFamily:'Inter, system-ui, sans-serif' }}>
+      {/* Toolbar */}
+      <div style={{
+        height:49,
+        borderBottom:'1px solid rgba(255,255,255,0.06)',
+        display:'flex',
+        alignItems:'center',
+        padding:'0 20px',
+        background:'#08090d',
+      }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#fff' }}>Leduc Solver — Game Tree Player</div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'232px 1fr 304px', gap:0, minHeight:'calc(100vh - 49px)' }}>
+        {/* LEFT SIDEBAR */}
+        <aside style={{ borderRight:'1px solid rgba(255,255,255,0.06)', padding:'18px 18px', display:'flex', flexDirection:'column', gap:24, background:'#08090d' }}>
+          <BoardPicker
+            currentRank={TREE.boardRankOf(currentNodeId)}
+            onPickRank={(r) => {}}
+            TREE={TREE}
+            currentNodeId={currentNodeId}
+            setCurrentNodeId={setCurrentNodeId}
+            history={history}
+            setHistory={setHistory}
+          />
+          <div>
+            <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em' }}>HISTORY</div>
+            <div style={{ marginTop:10, fontSize:11, fontFamily:'Inter, sans-serif', color:'rgba(255,255,255,0.7)', lineHeight:1.7 }}>
+              {history.length === 0 && <div style={{ color:'rgba(255,255,255,0.4)', fontStyle:'italic' }}>No moves yet.</div>}
+              {history.map((h, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <div style={{ width:4, height:4, borderRadius:'50%', background: h.color || 'rgba(255,255,255,0.4)' }}/>
+                  <span style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.45)', minWidth:24 }}>
+                    {h.player}
+                  </span>
+                  <span>{h.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>NODE</div>
+            <div style={{ fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.55)', wordBreak:'break-all' }}>
+              {currentNodeId}
+            </div>
+          </div>
+        </aside>
+
+        {/* CENTER */}
+        <main style={{ padding:'24px 28px', overflow:'auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+            <div>
+              <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em' }}>
+                LEDUC · GAME TREE
+              </div>
+              <h1 style={{ margin:'4px 0 0', fontSize:18, fontWeight:600, letterSpacing:'-0.01em' }}>
+                Interactive tree player
+              </h1>
+            </div>
+            {strategy && <ActionLegend actions={strategy.actions} visibleActions={visibleActions} setVisible={setVisibleActions}/>}
+          </div>
+
+          <GameTreePlayer
+            history={history}
+            currentNode={currentNode}
+            onAction={playAction}
+            onChance={playChance}
+            onReset={resetTree}
+            onUndo={undoMove}
+            onJump={jumpTo}
+          />
+
+          {showRange ? (
+            <>
+              <div style={{ display:'inline-block', position:'relative' }}>
+                <LeducTiles strategy={strategy} {...cellProps}/>
+              </div>
+              <div style={{ marginTop:18, fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.35)' }}>
+                Hero strategy at this node. Click an action above to continue down the tree.
+              </div>
+            </>
+          ) : (
+            <div style={{
+              padding:'32px 28px', borderRadius:6,
+              background:'#0a0b0f', border:'1px solid rgba(255,255,255,0.06)',
+              maxWidth:520,
+            }}>
+              <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em' }}>
+                {currentNode && currentNode.kind === 'terminal' ? 'TERMINAL' : 'CHANCE NODE'}
+              </div>
+              <div style={{ marginTop:8, fontSize:15, color:'#fff', lineHeight:1.5 }}>
+                {currentNode ? currentNode.label : 'No node selected'}
+              </div>
+              <div style={{ marginTop:14, fontSize:12, color:'rgba(255,255,255,0.5)', lineHeight:1.6 }}>
+                {currentNode && currentNode.kind === 'chance'
+                  ? 'Pick a board card above to continue.'
+                  : 'Hand ended. Click an earlier breadcrumb to revisit a decision, or reset.'}
+              </div>
+              <button onClick={resetTree} style={{
+                marginTop:18, padding:'7px 14px', borderRadius:5,
+                background:'rgba(255,255,255,0.06)', color:'#fff', border:'1px solid rgba(255,255,255,0.1)',
+                cursor:'pointer', fontFamily:'Inter, sans-serif', fontSize:12,
+              }}>Reset line</button>
+            </div>
+          )}
+        </main>
+
+        {/* RIGHT SIDEBAR */}
+        <aside style={{ borderLeft:'1px solid rgba(255,255,255,0.06)', padding:'18px 18px', display:'flex', flexDirection:'column', gap:22, background:'#08090d', overflow:'auto' }}>
+          {strategy ? (
+            <>
+              <DetailPanel hand={focused} strategy={strategy}/>
+              <div>
+                <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>RANGE STATS</div>
+                <div style={{ padding:14, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11, lineHeight:1.8 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Total hands</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'#fff' }}>{strategy.hands.length}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg equity</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'#fff' }}>
+                      {(strategy.hands.reduce((s,h)=>s+h.equity,0)/strategy.hands.length*100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color: strategy.hands.reduce((s,h)=>s+h.evTotal,0) >= 0 ? '#86efac' : '#fca5a5' }}>
+                      {((strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length) >= 0 ? '+' : '')}
+                      {(strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length).toFixed(2)} BB
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, padding:18, color:'rgba(255,255,255,0.5)', fontSize:12, lineHeight:1.5 }}>
+              No active decision node. Reset the line to start over.
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+</body>
+</html>
+

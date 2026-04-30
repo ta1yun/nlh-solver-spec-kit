@@ -30,9 +30,9 @@ data class LeducHand(val cardIdx: Int) : Hand {
     val suit: String = if (cardIdx % 2 == 0) "♠" else "♥"
 
     override fun conflicts(other: Hand): Boolean {
-        // In Leduc with suit abstraction, same-rank hands conflict
-        // (e.g., J♠ conflicts with J♥)
-        return (other as LeducHand).rank == this.rank
+        // Two hands conflict only if they're the exact same card
+        // (J♠ and J♥ are different cards and don't conflict)
+        return (other as LeducHand).cardIdx == this.cardIdx
     }
 
     override fun toString(): String = "$rankName$suit"

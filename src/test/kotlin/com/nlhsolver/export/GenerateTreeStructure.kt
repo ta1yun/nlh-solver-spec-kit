@@ -451,18 +451,12 @@ fun calculateEVWithHero(
         var totalEV = 0.0
         var boardCount = 0
 
-        val heroRank = heroCard / 2  // 0=J, 1=Q, 2=K
-
         for (board in listOf("J", "Q", "K")) {
             val bCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-            val boardRank = bCard / 2
 
-            // Skip if board rank matches hero's rank (suit abstraction)
-            if (boardRank == heroRank) continue
-
-            // Get all possible opponent cards (exclude hero's rank and board rank)
+            // Get all possible opponent cards (exclude only specific dealt cards)
             val opponentCards = (0..5).filter {
-                it / 2 != heroRank && it / 2 != boardRank
+                it != heroCard && it != bCard
             }
 
             var boardEV = 0.0
@@ -493,13 +487,12 @@ fun calculateEVWithHero(
         return totalEV / boardCount
     } else {
         // Round 2 or specific board - average over opponent holdings
-        val heroRank = heroCard / 2
         val opponentCards = if (round == 2) {
-            val boardRank = boardCard / 2
-            // Exclude opponent cards with same rank as hero or board (suit abstraction)
-            (0..5).filter { it / 2 != heroRank && it / 2 != boardRank }
+            // Exclude only the specific dealt cards (not entire ranks)
+            (0..5).filter { it != heroCard && it != boardCard }
         } else {
-            (0..5).filter { it / 2 != heroRank }
+            // Round 1: exclude only hero's specific card
+            (0..5).filter { it != heroCard }
         }
 
         var totalEV = 0.0
@@ -547,7 +540,17 @@ private fun calculateEVForMatchup(
         // Create a state with actual cards to get proper showdown result
         val finalState = state.copy(p1Card = p1Card, p2Card = p2Card, boardCard = boardCard)
         val utilities = finalState.getUtility()
-        return if (heroIsP1) utilities[0] else utilities[1]
+        val heroUtility = if (heroIsP1) utilities[0] else utilities[1]
+
+        // Debug: check if we're seeing wins/losses properly
+        val debug = false
+        if (debug && boardCard == 2) { // Q board
+            val heroRank = p1Card / 2
+            val oppRank = p2Card / 2
+            println("  Matchup: hero=$heroRank vs opp=$oppRank, utility=$heroUtility")
+        }
+
+        return heroUtility
     }
 
     // Cycle detection

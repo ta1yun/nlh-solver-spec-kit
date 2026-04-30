@@ -30,9 +30,9 @@ class LeducRange(
     override fun getTotalWeight(): Double = weights.values.sum()
 
     override fun excluding(hand: Hand): Range {
-        val excludedRank = (hand as LeducHand).rank
-        // Remove all cards of the same rank
-        val filtered = weights.filterKeys { (it / 2) != excludedRank }
+        val excludedCard = (hand as LeducHand).cardIdx
+        // Remove only the specific card, not the entire rank
+        val filtered = weights.filterKeys { it != excludedCard }
         return LeducRange(filtered)
     }
 

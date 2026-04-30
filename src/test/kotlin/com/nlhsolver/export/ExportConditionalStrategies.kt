@@ -33,10 +33,10 @@ class ExportConditionalStrategies : FunSpec({
 
         println("Training...")
         val solver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
-        repeat(50000) { i ->
+        repeat(500000) { i ->
             val matchup = allMatchups[i % allMatchups.size]
             solver.train(matchup, iterations = 1)
-            if ((i + 1) % 10000 == 0) println("  ${i + 1} iterations")
+            if ((i + 1) % 100000 == 0) println("  ${i + 1} iterations")
         }
 
         val profile = solver.getStrategyProfile()
@@ -76,64 +76,64 @@ fun exportConditionalScenarios(
     js.appendLine("  };")
     js.appendLine()
 
-    // Scenario 1: Round 2, Q board, after check-bet in R1, facing bet
+    // Scenario 1: Round 2, Q board, after check-bet-call in R1, P1 bets
     exportR2Scenario(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "xbdb",
-        historyLabel = "check-bet-deal-bet",
+        history = "xbc|b",
+        historyLabel = "check-bet-call | bet",
         actions = listOf("fold", "call", "raise"),
-        pot = 6, toCall = 2,
-        scenarioId = "r2_q_xbdb"
+        pot = 8, toCall = 2,
+        scenarioId = "r2_q_xbc_b"
     )
 
-    // Scenario 2: Round 2, Q board, after bet-call in R1, hero bets
+    // Scenario 2: Round 2, Q board, after bet-call in R1, P1 to act
     exportR2Scenario(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "bcd",
-        historyLabel = "bet-call-deal",
+        history = "bc|",
+        historyLabel = "bet-call | start of R2",
         actions = listOf("check", "bet"),
         pot = 6, toCall = 0,
-        scenarioId = "r2_q_bcd"
+        scenarioId = "r2_q_bc"
     )
 
-    // Scenario 3: Round 2, J board, after check-bet in R1, facing bet
+    // Scenario 3: Round 2, J board, after check-bet-call in R1, P1 bets
     exportR2Scenario(
         js, profile, allCards,
         boardCard = 0, // J
         boardName = "J♠",
-        history = "xbdb",
-        historyLabel = "check-bet-deal-bet",
-        actions = listOf("fold", "call", "raise"),
-        pot = 6, toCall = 2,
-        scenarioId = "r2_j_xbdb"
-    )
-
-    // Scenario 4: Round 2, Q board, after bet-call in R1, P2 facing P1 bet
-    exportR2Scenario(
-        js, profile, allCards,
-        boardCard = 2, // Q
-        boardName = "Q♠",
-        history = "bcdb",
-        historyLabel = "bet-call-deal-bet",
+        history = "xbc|b",
+        historyLabel = "check-bet-call | bet",
         actions = listOf("fold", "call", "raise"),
         pot = 8, toCall = 2,
-        scenarioId = "r2_q_bcdb"
+        scenarioId = "r2_j_xbc_b"
     )
 
-    // Scenario 5: Round 2, Q board, P1 facing P2's raise (after bet-call-deal-bet-raise)
+    // Scenario 4: Round 2, Q board, after bet-call in R1, P1 bets, P2 to act
     exportR2Scenario(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "bcdbb",
-        historyLabel = "bet-call-deal-bet-raise",
+        history = "bc|b",
+        historyLabel = "bet-call | bet",
+        actions = listOf("fold", "call", "raise"),
+        pot = 8, toCall = 2,
+        scenarioId = "r2_q_bc_b"
+    )
+
+    // Scenario 5: Round 2, Q board, P1 facing P2's raise (after bet-call | bet-raise)
+    exportR2Scenario(
+        js, profile, allCards,
+        boardCard = 2, // Q
+        boardName = "Q♠",
+        history = "bc|br",
+        historyLabel = "bet-call | bet-raise",
         actions = listOf("fold", "call"),
         pot = 12, toCall = 2,
-        scenarioId = "r2_q_bcdbb"
+        scenarioId = "r2_q_bc_br"
     )
 
     // Scenario 6: Round 2, Q board, after both check in R1 — P1 to act
@@ -141,11 +141,11 @@ fun exportConditionalScenarios(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "xxd",
-        historyLabel = "check-check-deal",
+        history = "xx|",
+        historyLabel = "check-check | start of R2",
         actions = listOf("check", "bet"),
         pot = 2, toCall = 0,
-        scenarioId = "r2_q_xxd"
+        scenarioId = "r2_q_xx"
     )
 
     // Scenario 7: Round 2, Q board, after bet-raise-call in R1 — P1 to act
@@ -153,11 +153,11 @@ fun exportConditionalScenarios(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "brcd",
-        historyLabel = "bet-raise-call-deal",
+        history = "brc|",
+        historyLabel = "bet-raise-call | start of R2",
         actions = listOf("check", "bet"),
         pot = 8, toCall = 0,
-        scenarioId = "r2_q_brcd"
+        scenarioId = "r2_q_brc"
     )
 
     // Scenario 8: Round 2, Q board, after check-bet-call in R1 — P2 to act
@@ -165,11 +165,11 @@ fun exportConditionalScenarios(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "xbcd",
-        historyLabel = "check-bet-call-deal",
+        history = "xbc|",
+        historyLabel = "check-bet-call | start of R2",
         actions = listOf("check", "bet"),
         pot = 6, toCall = 0,
-        scenarioId = "r2_q_xbcd"
+        scenarioId = "r2_q_xbc"
     )
 
     // Scenario 9: Round 2, Q board, after check-bet-raise-call in R1 — P2 to act
@@ -177,23 +177,36 @@ fun exportConditionalScenarios(
         js, profile, allCards,
         boardCard = 2, // Q
         boardName = "Q♠",
-        history = "xbrcd",
-        historyLabel = "check-bet-raise-call-deal",
+        history = "xbrc|",
+        historyLabel = "check-bet-raise-call | start of R2",
         actions = listOf("check", "bet"),
         pot = 8, toCall = 0,
-        scenarioId = "r2_q_xbrcd"
+        scenarioId = "r2_q_xbrc"
+    )
+
+    // Scenario 10: Round 2, Q board, after check-bet-call in R1, P2 checked — P1 to act
+    exportR2Scenario(
+        js, profile, allCards,
+        boardCard = 2, // Q
+        boardName = "Q♠",
+        history = "xbc|x",
+        historyLabel = "check-bet-call | P2 check, P1 to act",
+        actions = listOf("check", "bet"),
+        pot = 6, toCall = 0,
+        scenarioId = "r2_q_xbc_x"
     )
 
     js.appendLine("  window.LEDUC_CONDITIONAL = {")
-    js.appendLine("    r2_q_xbdb: makeScenario_r2_q_xbdb(),")
-    js.appendLine("    r2_q_bcd: makeScenario_r2_q_bcd(),")
-    js.appendLine("    r2_j_xbdb: makeScenario_r2_j_xbdb(),")
-    js.appendLine("    r2_q_bcdb: makeScenario_r2_q_bcdb(),")
-    js.appendLine("    r2_q_bcdbb: makeScenario_r2_q_bcdbb(),")
-    js.appendLine("    r2_q_xxd: makeScenario_r2_q_xxd(),")
-    js.appendLine("    r2_q_brcd: makeScenario_r2_q_brcd(),")
-    js.appendLine("    r2_q_xbcd: makeScenario_r2_q_xbcd(),")
-    js.appendLine("    r2_q_xbrcd: makeScenario_r2_q_xbrcd(),")
+    js.appendLine("    r2_q_xbc_b: makeScenario_r2_q_xbc_b(),")
+    js.appendLine("    r2_q_bc: makeScenario_r2_q_bc(),")
+    js.appendLine("    r2_j_xbc_b: makeScenario_r2_j_xbc_b(),")
+    js.appendLine("    r2_q_bc_b: makeScenario_r2_q_bc_b(),")
+    js.appendLine("    r2_q_bc_br: makeScenario_r2_q_bc_br(),")
+    js.appendLine("    r2_q_xx: makeScenario_r2_q_xx(),")
+    js.appendLine("    r2_q_brc: makeScenario_r2_q_brc(),")
+    js.appendLine("    r2_q_xbc: makeScenario_r2_q_xbc(),")
+    js.appendLine("    r2_q_xbrc: makeScenario_r2_q_xbrc(),")
+    js.appendLine("    r2_q_xbc_x: makeScenario_r2_q_xbc_x(),")
     js.appendLine("  };")
     js.appendLine("})();")
 
@@ -310,7 +323,9 @@ fun computeFilteredRangeData(
         if (heroCard == boardCard) continue
 
         val heroRank = when(heroCard) { 0, 1 -> "J"; 2, 3 -> "Q"; 4, 5 -> "K"; else -> "?" }
-        val infoSetKey = "$heroRank$boardRank $history"
+        // Convert history to match solver format: 'd' instead of '|'
+        val solverHistory = history.replace("|", "d")
+        val infoSetKey = "$heroRank$boardRank $solverHistory"
 
         // Get strategy at this node
         val strategy = try {

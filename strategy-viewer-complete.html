@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leduc Hold'em — Complete Game Tree</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#06070a; color:#fff; font-family: 'Inter', system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  ::selection { background: rgba(34,197,94,0.4); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- Load complete export with all 108 scenarios -->
+<script src="file:///Users/tpai/Downloads/leduc-complete.js"></script>
+
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+// Build complete game tree from exported scenarios
+function buildCompleteTree() {
+  const SCENARIOS = window.LEDUC_COMPLETE;
+  if (!SCENARIOS) {
+    console.error('LEDUC_COMPLETE not loaded');
+    return null;
+  }
+
+  const ACT = {
+    fold:  { id:'fold',  label:'Fold',  color:'#e5484d' },
+    check: { id:'check', label:'Check', color:'#8b8d98' },
+    call:  { id:'call',  label:'Call',  color:'#3b82f6' },
+    bet:   { id:'bet',   label:'Bet',   color:'#f59e0b' },
+    raise: { id:'raise', label:'Raise', color:'#22c55e' },
+  };
+
+  const nodes = {};
+
+  // Helper: convert hands to strategies
+  function handsToStrategies(scenario) {
+    const strat = {};
+    for (const h of scenario.hands) {
+      strat[h.id] = {
+        freq: { ...h.freq },
+        equity: h.equity || 0.5,
+        evTotal: h.evTotal || 0,
+        ev: h.ev || {},
+      };
+    }
+    return strat;
+  }
+
+  // Helper: parse history to get action sequence
+  function parseHistory(history) {
+    const actions = [];
+    let player = 0; // P1 starts
+
+    for (let i = 0; i < history.length; i++) {
+      const action = history[i];
+      if (action === '|' || action === 'd') {
+        actions.push({ type: 'deal' });
+        player = 0; // Reset to P1 after deal
+        continue;
+      }
+
+      const actionName = {
+        'x': 'Check',
+        'b': 'Bet',
+        'c': 'Call',
+        'r': 'Raise',
+        'f': 'Fold'
+      }[action] || action;
+
+      actions.push({
+        type: 'action',
+        player: player === 0 ? 'P1' : 'P2',
+        action: actionName
+      });
+
+      player = 1 - player;
+    }
+
+    return actions;
+  }
+
+  // Helper: get current player from history
+  function getCurrentPlayer(history) {
+    // Split by round
+    const parts = history.split(/[|d]/);
+    const currentRoundHistory = parts[parts.length - 1] || '';
+    return currentRoundHistory.length % 2 === 0 ? 'P1' : 'P2';
+  }
+
+  // Helper: get round from history
+  function getRound(history) {
+    return history.includes('|') || history.includes('d') ? 2 : 1;
+  }
+
+  // Helper: get board from scenario ID
+  function getBoard(scenarioId) {
+    const match = scenarioId.match(/_(j|q|k)_/);
+    if (!match) return null;
+    const card = match[1].toUpperCase();
+    return `${card}♠`;
+  }
+
+  // Helper: format history for display
+  function formatHistoryDisplay(history) {
+    const actions = parseHistory(history);
+    return actions.map(a => {
+      if (a.type === 'deal') return { type: 'chance', label: 'Board dealt' };
+      return { type: 'action', player: a.player, action: a.action };
+    });
+  }
+
+  // Helper: get pot size from history
+  function getPotSize(history) {
+    let pot = 2; // Antes
+    let p1Inv = 1, p2Inv = 1;
+    let player = 0;
+
+    for (const action of history) {
+      if (action === '|' || action === 'd') {
+        player = 0;
+        continue;
+      }
+
+      const round = history.substring(0, history.indexOf(action)).includes('|') ? 2 : 1;
+      const betSize = round === 1 ? 2 : 4;
+
+      if (action === 'b') {
+        if (player === 0) p1Inv += betSize; else p2Inv += betSize;
+      } else if (action === 'r') {
+        if (player === 0) p1Inv = p2Inv + betSize; else p2Inv = p1Inv + betSize;
+      } else if (action === 'c') {
+        if (player === 0) p1Inv = p2Inv; else p2Inv = p1Inv;
+      }
+
+      player = 1 - player;
+    }
+
+    return p1Inv + p2Inv;
+  }
+
+  // Helper: get toCall amount
+  function getToCall(history) {
+    let p1Inv = 1, p2Inv = 1;
+    let player = 0;
+
+    for (const action of history) {
+      if (action === '|' || action === 'd') {
+        player = 0;
+        continue;
+      }
+
+      const round = history.substring(0, history.indexOf(action)).includes('|') ? 2 : 1;
+      const betSize = round === 1 ? 2 : 4;
+
+      if (action === 'b') {
+        if (player === 0) p1Inv += betSize; else p2Inv += betSize;
+      } else if (action === 'r') {
+        if (player === 0) p1Inv = p2Inv + betSize; else p2Inv = p1Inv + betSize;
+      } else if (action === 'c') {
+        if (player === 0) p1Inv = p2Inv; else p2Inv = p1Inv;
+      }
+
+      player = 1 - player;
+    }
+
+    return Math.abs(p1Inv - p2Inv);
+  }
+
+  // Build tree nodes from scenarios
+  // Start with root
+  const rootScenario = SCENARIOS.r1_j_; // Use J board scenario as template
+  if (rootScenario) {
+    nodes['root'] = {
+      id: 'root',
+      kind: 'decision',
+      round: 1,
+      player: 'P1',
+      label: 'Round 1 — P1 to act',
+      pot: 2,
+      toCall: 0,
+      strategies: handsToStrategies(rootScenario),
+      actions: rootScenario.actions,
+      children: { check: 'r1_x', bet: 'r1_b' },
+      history: ''
+    };
+  }
+
+  // Map scenario IDs to history strings
+  // r1_j_b → history "b"
+  // r2_q_bc_xb → history "bc|xb"
+  function scenarioIdToHistory(id) {
+    // Remove r1_ or r2_ prefix and board
+    let h = id.replace(/^r[12]_[jqk]_/, '');
+
+    // If r2, add | before the r2 part
+    if (id.startsWith('r2_')) {
+      const parts = id.split('_');
+      const r1Part = parts[2]; // e.g., "bc", "xx", "xbc"
+      const r2Part = h.substring(r1Part.length); // Everything after r1 part
+      h = r1Part + '|' + r2Part;
+    }
+
+    return h.replace(/_/g, ''); // Remove underscores
+  }
+
+  // Build all nodes from scenarios
+  for (const [scenarioId, scenario] of Object.entries(SCENARIOS)) {
+    if (scenarioId === 'r1_j_' && nodes['root']) continue; // Already have root
+
+    const history = scenarioIdToHistory(scenarioId);
+    const round = getRound(history);
+    const player = getCurrentPlayer(history);
+    const board = getBoard(scenarioId);
+    const pot = getPotSize(history);
+    const toCall = getToCall(history);
+
+    // Build node ID from history
+    const nodeId = scenarioId;
+
+    // Determine children based on available actions
+    const children = {};
+    for (const action of scenario.actions) {
+      const actionKey = action.id;
+      const childHistory = history + actionKey;
+      const childId = scenarioId + '_' + actionKey;
+      children[actionKey] = childId;
+    }
+
+    // Create node
+    nodes[nodeId] = {
+      id: nodeId,
+      kind: 'decision',
+      round,
+      player,
+      label: `Round ${round} — ${player} to act`,
+      pot,
+      toCall,
+      board: board ? [board] : [],
+      strategies: handsToStrategies(scenario),
+      actions: scenario.actions,
+      children,
+      history
+    };
+  }
+
+  // Add chance nodes for board deals
+  // After any R1 terminal action (xx, bc, rc, xbc, xbrc, brc)
+  const r1Terminals = ['xx', 'bc', 'rc', 'xbc', 'xbrc', 'brc'];
+  for (const hist of r1Terminals) {
+    const chanceId = `r1_${hist}_chance`;
+    nodes[chanceId] = {
+      id: chanceId,
+      kind: 'chance',
+      label: `Round 1 complete (${hist}) — Deal board`,
+      children: [
+        { label: 'J♠', card: { rank: 'J', suit: '♠', id: 'Ja' }, nodeId: `r2_j_${hist}_` },
+        { label: 'Q♠', card: { rank: 'Q', suit: '♠', id: 'Qa' }, nodeId: `r2_q_${hist}_` },
+        { label: 'K♠', card: { rank: 'K', suit: '♠', id: 'Ka' }, nodeId: `r2_k_${hist}_` },
+      ],
+      history: hist
+    };
+  }
+
+  // Add terminal nodes for folds and showdowns
+  // This requires checking which paths lead to terminals
+  // For now, we'll add them as we encounter them in navigation
+
+  console.log('Built tree with', Object.keys(nodes).length, 'nodes');
+  console.log('Sample nodes:', Object.keys(nodes).slice(0, 20));
+
+  return { nodes, ACT };
+}
+
+// Main App Component
+function App() {
+  const treeData = useMemo(() => buildCompleteTree(), []);
+  const [currentNode, setCurrentNode] = useState('root');
+
+  if (!treeData) {
+    return <div style={{padding: '2rem', color: '#ef4444'}}>
+      Error: Could not load LEDUC_COMPLETE. Make sure leduc-complete.js is loaded.
+    </div>;
+  }
+
+  const { nodes, ACT } = treeData;
+  const node = nodes[currentNode];
+
+  if (!node) {
+    return <div style={{padding: '2rem'}}>
+      <div style={{color: '#ef4444', marginBottom: '1rem'}}>Node not found: {currentNode}</div>
+      <button onClick={() => setCurrentNode('root')}
+        style={{padding: '0.5rem 1rem', background: '#3b82f6', border: 'none', borderRadius: '0.5rem', color: '#fff', cursor: 'pointer'}}>
+        Return to Root
+      </button>
+    </div>;
+  }
+
+  // Parse history for display
+  const historyDisplay = node.history ? parseHistory(node.history) : [];
+
+  return (
+    <div style={{padding: '2rem', maxWidth: '1200px', margin: '0 auto'}}>
+      <h1 style={{fontSize: '1.5rem', fontWeight: '600', marginBottom: '2rem'}}>
+        Leduc Hold'em — Complete Game Tree
+      </h1>
+
+      {/* Breadcrumb */}
+      <div style={{marginBottom: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem'}}>
+        <div style={{fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.5rem'}}>Current Node:</div>
+        <div style={{fontFamily: 'JetBrains Mono', fontSize: '0.875rem', color: '#22c55e'}}>{currentNode}</div>
+        {currentNode !== 'root' && (
+          <button onClick={() => setCurrentNode('root')}
+            style={{marginTop: '0.5rem', padding: '0.25rem 0.75rem', background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '0.25rem', color: '#60a5fa', cursor: 'pointer', fontSize: '0.75rem'}}>
+            ← Back to Root
+          </button>
+        )}
+      </div>
+
+      {/* History Display */}
+      {historyDisplay.length > 0 && (
+        <div style={{marginBottom: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem'}}>
+          <div style={{fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.75rem'}}>HISTORY</div>
+          <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
+            {historyDisplay.map((item, i) => (
+              item.type === 'chance' ? (
+                <div key={i} style={{padding: '0.5rem 0.75rem', background: 'rgba(168,85,247,0.2)', border: '1px solid rgba(168,85,247,0.5)', borderRadius: '0.25rem', fontSize: '0.875rem', color: '#c084fc'}}>
+                  CHANCE {node.board && node.board[0]}
+                </div>
+              ) : (
+                <div key={i} style={{padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.1)', borderRadius: '0.25rem', fontSize: '0.875rem'}}>
+                  <span style={{color: '#9ca3af'}}>{item.player}</span> <span style={{color: '#fff'}}>{item.action}</span>
+                </div>
+              )
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Node Info */}
+      <div style={{marginBottom: '2rem', padding: '1.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem'}}>
+        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem'}}>
+          <div>
+            <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>NODE</div>
+            <div style={{fontSize: '1.25rem', fontWeight: '600', color: '#22c55e'}}>{currentNode}</div>
+          </div>
+          <div>
+            <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>KIND</div>
+            <div style={{fontSize: '1rem', fontWeight: '500'}}>{node.kind}</div>
+          </div>
+          {node.round && (
+            <div>
+              <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>ROUND</div>
+              <div style={{fontSize: '1rem', fontWeight: '500'}}>Round {node.round}</div>
+            </div>
+          )}
+          {node.player && (
+            <div>
+              <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>PLAYER</div>
+              <div style={{fontSize: '1rem', fontWeight: '500'}}>{node.player}</div>
+            </div>
+          )}
+          {node.pot !== undefined && (
+            <div>
+              <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>POT</div>
+              <div style={{fontSize: '1rem', fontWeight: '500'}}>{node.pot}</div>
+            </div>
+          )}
+          {node.toCall !== undefined && (
+            <div>
+              <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem'}}>TO CALL</div>
+              <div style={{fontSize: '1rem', fontWeight: '500'}}>{node.toCall}</div>
+            </div>
+          )}
+        </div>
+        {node.board && node.board.length > 0 && (
+          <div>
+            <div style={{fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem'}}>BOARD</div>
+            <div style={{fontSize: '1.5rem', fontWeight: '600'}}>{node.board.join(' ')}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Actions / Children */}
+      {node.kind === 'decision' && node.children && (
+        <div style={{marginBottom: '2rem'}}>
+          <div style={{fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.75rem'}}>ACTIONS</div>
+          <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
+            {Object.entries(node.children).map(([actionKey, childId]) => {
+              const action = node.actions?.find(a => a.id === actionKey);
+              const color = action?.color || '#6b7280';
+              return (
+                <button key={actionKey}
+                  onClick={() => setCurrentNode(childId)}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: color + '20',
+                    border: `2px solid ${color}`,
+                    borderRadius: '0.5rem',
+                    color: color,
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = color + '40'}
+                  onMouseOut={(e) => e.target.style.background = color + '20'}>
+                  {action?.label || actionKey}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {node.kind === 'chance' && node.children && (
+        <div style={{marginBottom: '2rem'}}>
+          <div style={{fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.75rem'}}>CHANCE OUTCOMES</div>
+          <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
+            {node.children.map((child, i) => (
+              <button key={i}
+                onClick={() => setCurrentNode(child.nodeId)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(168,85,247,0.2)',
+                  border: '2px solid rgba(168,85,247,0.5)',
+                  borderRadius: '0.5rem',
+                  color: '#c084fc',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500'
+                }}>
+                {child.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Strategies */}
+      {node.strategies && (
+        <div>
+          <div style={{fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.75rem'}}>STRATEGIES</div>
+          <div style={{display: 'grid', gap: '0.5rem'}}>
+            {Object.entries(node.strategies).map(([hand, strat]) => (
+              <div key={hand} style={{padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem'}}>
+                <div style={{fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem'}}>{hand}</div>
+                <div style={{display: 'flex', gap: '1rem', fontSize: '0.875rem'}}>
+                  {Object.entries(strat.freq).map(([action, freq]) => (
+                    <div key={action}>
+                      <span style={{color: '#9ca3af'}}>{action}:</span>{' '}
+                      <span style={{color: '#fff', fontFamily: 'JetBrains Mono'}}>{(freq * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+
+</body>
+</html>

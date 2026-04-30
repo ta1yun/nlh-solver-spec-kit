@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leduc Hold'em — Complete Tree Navigator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0e14; color: #e6e9ed; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 2rem; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 2rem; color: #5ccfe6; }
+  .section { background: #13171f; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #1f2430; }
+  .label { font-size: 0.75rem; color: #8a909f; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  .value { font-size: 1.1rem; color: #e6e9ed; font-weight: 500; }
+  .history-item { display: inline-block; padding: 0.5rem 1rem; background: #1f2430; border-radius: 4px; margin: 0.25rem; }
+  .player { color: #5ccfe6; font-weight: 600; }
+  .action-btn { 
+    display: inline-block; padding: 0.75rem 1.5rem; margin: 0.5rem; border-radius: 6px; 
+    border: none; cursor: pointer; font-size: 1rem; font-weight: 500; transition: all 0.2s;
+  }
+  .btn-fold { background: #e74856; color: white; }
+  .btn-check { background: #5d646f; color: white; }
+  .btn-call { background: #3592c4; color: white; }
+  .btn-bet { background: #f2b70f; color: #0a0e14; }
+  .btn-raise { background: #7fcd46; color: #0a0e14; }
+  .btn-back { background: #1f2430; color: #5ccfe6; border: 1px solid #5ccfe6; padding: 0.5rem 1rem; font-size: 0.875rem; }
+  .hand-row { padding: 0.75rem; background: #1f2430; border-radius: 4px; margin: 0.5rem 0; }
+  .hand-name { font-size: 1rem; font-weight: 600; color: #f2b70f; margin-bottom: 0.5rem; }
+  .freq { display: inline-block; margin-right: 1.5rem; }
+  .freq-label { color: #8a909f; }
+  .freq-value { color: #e6e9ed; font-family: 'Monaco', monospace; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+  .grid-item { }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎴 Leduc Hold'em — Complete Game Tree</h1>
+  
+  <div id="app"></div>
+</div>
+
+<script src="file:///Users/tpai/Downloads/leduc-complete.js"></script>
+
+<script>
+// Game tree navigator
+const SCENARIOS = window.LEDUC_COMPLETE;
+
+if (!SCENARIOS) {
+  document.getElementById('app').innerHTML = '<div class="section"><div style="color: #e74856;">Error: leduc-complete.js not loaded</div></div>';
+} else {
+  let currentScenario = 'r1_j_'; // Start at root
+  let history = [];
+
+  function render() {
+    const scenario = SCENARIOS[currentScenario];
+    if (!scenario) {
+      document.getElementById('app').innerHTML = `
+        <div class="section">
+          <div style="color: #e74856; margin-bottom: 1rem;">Scenario not found: ${currentScenario}</div>
+          <button class="btn-back" onclick="goToRoot()">Back to Root</button>
+        </div>
+      `;
+      return;
+    }
+
+    // Parse scenario ID to get info
+    const match = currentScenario.match(/^r(\d)_([jqk])_(.*)$/);
+    const round = match ? match[1] : '1';
+    const board = match ? match[2].toUpperCase() : '';
+    const historyStr = match ? match[3] : '';
+
+    // Parse history into actions
+    const actions = [];
+    let player = 0;
+    for (let i = 0; i < historyStr.length; i++) {
+      const a = historyStr[i];
+      if (a === '_') continue;
+      const actionName = {
+        'x': 'Check',
+        'b': 'Bet',
+        'c': 'Call',
+        'r': 'Raise',
+        'f': 'Fold'
+      }[a] || a;
+      actions.push({ player: player === 0 ? 'P1' : 'P2', action: actionName });
+      player = 1 - player;
+    }
+
+    // Determine current player
+    const currentPlayer = historyStr.length % 2 === 0 ? 'P1' : 'P2';
+
+    // Calculate pot
+    let pot = 2;
+    let p1Inv = 1, p2Inv = 1;
+    let p = 0;
+    for (const a of historyStr.replace(/_/g, '')) {
+      const betSize = round === '1' ? 2 : 4;
+      if (a === 'b') {
+        if (p === 0) p1Inv += betSize; else p2Inv += betSize;
+      } else if (a === 'r') {
+        if (p === 0) p1Inv = p2Inv + betSize; else p2Inv = p1Inv + betSize;
+      } else if (a === 'c') {
+        if (p === 0) p1Inv = p2Inv; else p2Inv = p1Inv;
+      }
+      p = 1 - p;
+    }
+    pot = p1Inv + p2Inv;
+    const toCall = Math.abs(p1Inv - p2Inv);
+
+    // Build UI
+    let html = '';
+
+    // Current node info
+    html += '<div class="section">';
+    html += '<div class="grid">';
+    html += `<div class="grid-item"><div class="label">Scenario ID</div><div class="value" style="font-family: Monaco; color: #7fcd46;">${currentScenario}</div></div>`;
+    html += `<div class="grid-item"><div class="label">Round</div><div class="value">Round ${round}</div></div>`;
+    html += `<div class="grid-item"><div class="label">Board</div><div class="value">${round === '2' ? board + '♠' : 'Not dealt yet'}</div></div>`;
+    html += `<div class="grid-item"><div class="label">Player to Act</div><div class="value">${currentPlayer}</div></div>`;
+    html += `<div class="grid-item"><div class="label">Pot</div><div class="value">${pot}</div></div>`;
+    html += `<div class="grid-item"><div class="label">To Call</div><div class="value">${toCall}</div></div>`;
+    html += '</div>';
+    html += '</div>';
+
+    // History
+    if (actions.length > 0) {
+      html += '<div class="section">';
+      html += '<div class="label">History</div>';
+      html += '<div>';
+      actions.forEach(a => {
+        html += `<div class="history-item"><span class="player">${a.player}</span> ${a.action}</div>`;
+      });
+      html += '</div>';
+      html += '</div>';
+    }
+
+    // Actions
+    html += '<div class="section">';
+    html += '<div class="label">Available Actions</div>';
+    html += '<div>';
+    
+    if (currentScenario !== 'r1_j_') {
+      html += `<button class="btn-back" onclick="goToRoot()">← Back to Root</button>`;
+    }
+
+    scenario.actions.forEach(action => {
+      const btnClass = `btn-${action.id}`;
+      html += `<button class="${btnClass} action-btn" onclick="takeAction('${action.id}')">${action.label}</button>`;
+    });
+    html += '</div>';
+    html += '</div>';
+
+    // Strategies
+    html += '<div class="section">';
+    html += '<div class="label">Optimal Strategy</div>';
+    scenario.hands.forEach(hand => {
+      html += `<div class="hand-row">`;
+      html += `<div class="hand-name">${hand.label}</div>`;
+      Object.entries(hand.freq).forEach(([action, freq]) => {
+        html += `<div class="freq"><span class="freq-label">${action}:</span> <span class="freq-value">${(freq * 100).toFixed(1)}%</span></div>`;
+      });
+      html += `</div>`;
+    });
+    html += '</div>';
+
+    document.getElementById('app').innerHTML = html;
+  }
+
+  window.goToRoot = function() {
+    currentScenario = 'r1_j_';
+    history = [];
+    render();
+  };
+
+  window.takeAction = function(actionId) {
+    const scenario = SCENARIOS[currentScenario];
+    if (!scenario) return;
+
+    // Build next scenario ID
+    let nextId = currentScenario;
+
+    // Determine the new history string
+    if (nextId.endsWith('_')) {
+      nextId = nextId + actionId;
+    } else {
+      nextId = nextId + '_' + actionId;
+    }
+
+    // Check if it exists in round 1
+    if (SCENARIOS[nextId]) {
+      currentScenario = nextId;
+      render();
+      return;
+    }
+
+    // For R1 terminal actions, need to transition to R2
+    const match = currentScenario.match(/^r1_([jqk])_(.*)$/);
+    if (match) {
+      const board = match[1];
+      const r1Hist = match[2] + (match[2].endsWith('_') ? '' : '_') + actionId;
+      
+      // Check if this is a R1 terminal (xx, bc, rc, xbc, brc, xbrc)
+      const cleanHist = r1Hist.replace(/_/g, '');
+      const isTerminal = ['xx', 'bc', 'rc', 'xbc', 'brc', 'xbrc'].includes(cleanHist);
+      
+      if (isTerminal) {
+        // Transition to R2 - user needs to pick board
+        alert(`Round 1 complete! History: ${cleanHist}\n\nNow pick a board to see Round 2:`);
+        // For now, auto-pick Q board
+        const r2Id = `r2_q_${cleanHist}_`;
+        if (SCENARIOS[r2Id]) {
+          currentScenario = r2Id;
+          render();
+          return;
+        }
+      }
+    }
+
+    // For R2, continue building
+    if (SCENARIOS[nextId]) {
+      currentScenario = nextId;
+      render();
+    } else {
+      alert(`Scenario ${nextId} not found. This may be a terminal node.`);
+    }
+  };
+
+  render();
+}
+</script>
+
+</body>
+</html>
