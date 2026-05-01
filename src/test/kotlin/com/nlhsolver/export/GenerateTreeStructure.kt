@@ -9,15 +9,25 @@ import io.kotest.core.spec.style.FunSpec
 import java.io.File
 
 /**
- * Export Leduc as a recursive tree structure instead of flat scenarios.
- * This format is better for dynamic navigation and scales to NLH.
+ * Export poker game trees for UI visualization.
+ *
+ * DESIGN FOR GENERALIZATION:
+ * While this file currently exports Leduc trees, the EV calculation functions
+ * use generic interfaces (Hand, Range) that work for any poker variant:
+ *
+ * - calculateEVWithRange(Hand, Range, ...) - works for Leduc, NLH, PLO
+ * - calculateEVForActionWithRange(Hand, Range, ...) - variant-independent
+ * - computeOpponentRange(...) -> Range - returns interface, not concrete type
+ *
+ * To add NLH support:
+ * 1. Create NLHHand and NLHRange implementing Hand/Range interfaces
+ * 2. Create NLH-specific tree builder (similar to buildTreeNode)
+ * 3. Reuse the same EV calculation functions with NLH types
  *
  * KEY INSIGHT: Chance nodes (board dealing) appear exactly when betting
  * rounds complete. This is detected via isBettingRoundComplete() which
  * checks if the pot is "capped" (all players matched) and last action
- * was passive (check/call).
- *
- * This pattern generalizes to all poker variants (NLH, PLO, etc.).
+ * was passive (check/call). This pattern generalizes to all poker variants.
  */
 class GenerateTreeStructure : FunSpec({
 
@@ -165,13 +175,23 @@ fun calculateEquity(playerCard: Int, boardCard: Int): Double {
  * @param currentPlayer Who is acting now (opponent is the other player)
  * @return Opponent's range distribution at this node
  */
+/**
+ * Compute opponent's range at a given game state.
+ *
+ * This function is game-agnostic - it works for any poker variant by:
+ * 1. Starting with a uniform range
+ * 2. Replaying the game history
+ * 3. Propagating range through opponent's equilibrium actions
+ *
+ * @return Range interface that can be LeducRange, NLHRange, etc.
+ */
 fun computeOpponentRange(
     state: LeducWithSuitAbstraction,
     profile: StrategyProfile,
     currentPlayer: Int
-): LeducRange {
-    // Start with uniform range
-    var oppRange = LeducRange.uniform()
+): Range {
+    // Start with uniform range (Leduc-specific implementation)
+    var oppRange: Range = LeducRange.uniform()
     val propagator = LeducRangePropagator()
 
     val opponentPlayer = 1 - currentPlayer
@@ -220,7 +240,7 @@ fun computeOpponentRange(
                 if (turnPlayer == opponentPlayer) {
                     oppRange = propagator.propagate(
                         oppRange, action, replayState, profile
-                    ) as LeducRange
+                    )
                 }
 
                 // Apply action and update turn
@@ -249,10 +269,25 @@ fun computeOpponentRange(
  * @param heroPlayer Which player is the hero (0=P1, 1=P2)
  * @return Expected value in big blinds vs opponent's equilibrium range
  */
+/**
+ * Calculate EV for a specific hand against opponent's actual range.
+ *
+ * This is the core range-based EV calculation used in modern poker solvers.
+ * Unlike uniform EV (which assumes opponent has all hands equally), this
+ * accounts for how opponent's range has evolved through equilibrium play.
+ *
+ * Generic signature allows use with any poker variant:
+ * - Leduc: Hand = LeducHand, Range = LeducRange
+ * - NLH: Hand = NLHHand, Range = NLHRange
+ *
+ * @param heroHand The specific hand we're calculating EV for
+ * @param opponentRange The opponent's probability distribution over hands
+ * @return Expected value in big blinds from hero's perspective
+ */
 fun calculateEVWithRange(
     state: LeducWithSuitAbstraction,
-    heroHand: LeducHand,
-    opponentRange: LeducRange,
+    heroHand: Hand,
+    opponentRange: Range,
     boardCard: Int,
     boardName: String,
     profile: StrategyProfile,
@@ -266,15 +301,18 @@ fun calculateEVWithRange(
         var totalEV = 0.0
         var boardCount = 0
 
+        // Leduc-specific: cast to access cardIdx
+        val leducHero = heroHand as LeducHand
+
         for (bCard in 0..5) {
             // Skip impossible scenario where board card is same as hero card
-            if (bCard == heroHand.cardIdx) continue
+            if (bCard == leducHero.cardIdx) continue
 
             val board = when(bCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "?" }
 
             // Filter opponent range: exclude hero hand AND board card
             val boardHand = LeducHand(bCard)
-            var validRange = opponentRange.excluding(heroHand).excluding(boardHand) as LeducRange
+            var validRange = opponentRange.excluding(heroHand).excluding(boardHand)
 
             var boardEV = 0.0
             var boardWeight = 0.0
@@ -283,7 +321,7 @@ fun calculateEVWithRange(
                 if (weight <= 0.0) continue
 
                 val oppCardIdx = (oppHand as LeducHand).cardIdx
-                val heroCardIdx = heroHand.cardIdx
+                val heroCardIdx = leducHero.cardIdx
 
                 val (p1Card, p2Card) = if (heroIsP1) {
                     Pair(heroCardIdx, oppCardIdx)
@@ -314,18 +352,21 @@ fun calculateEVWithRange(
     var validRange = opponentRange.excluding(heroHand)
     if (boardCard >= 0) {
         val boardHand = LeducHand(boardCard)
-        validRange = validRange.excluding(boardHand) as LeducRange
+        validRange = validRange.excluding(boardHand)
     }
 
     // Weight EV by opponent's range distribution
     var totalEV = 0.0
     var totalWeight = 0.0
 
+    // Leduc-specific: cast to access cardIdx
+    val leducHero = heroHand as LeducHand
+
     for ((oppHand, weight) in validRange.getActiveHands()) {
         if (weight <= 0.0) continue
 
         val oppCardIdx = (oppHand as LeducHand).cardIdx
-        val heroCardIdx = heroHand.cardIdx
+        val heroCardIdx = leducHero.cardIdx
 
         val (p1Card, p2Card) = if (heroIsP1) {
             Pair(heroCardIdx, oppCardIdx)
@@ -392,12 +433,25 @@ fun calculateEVForAction(
 
 /**
  * Calculate EV for taking a specific action against opponent's actual range.
+ *
+ * This computes what happens when hero takes a specific action (fold/call/raise)
+ * against opponent's equilibrium range. The opponent's range at the next state
+ * will be different depending on which action hero takes.
+ *
+ * Generic signature for poker variant independence:
+ * - Hand interface works for Leduc, NLH, PLO, etc.
+ * - Range interface encapsulates range representation for any variant
+ *
+ * @param heroHand Hero's specific hand
+ * @param action The action hero is considering (fold/call/raise/etc.)
+ * @param opponentRange Opponent's current range distribution
+ * @return Expected value of taking this action, in big blinds
  */
 fun calculateEVForActionWithRange(
     state: LeducWithSuitAbstraction,
-    heroHand: LeducHand,
+    heroHand: Hand,
     action: GameAction,
-    opponentRange: LeducRange,
+    opponentRange: Range,
     boardCard: Int,
     boardName: String,
     profile: StrategyProfile,
