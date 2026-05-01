@@ -55,6 +55,34 @@ interface GameState {
      * Used for caching and memoization.
      */
     fun getStateHash(): String
+
+    /**
+     * Returns true if this is a chance node (nature acts, not a player).
+     *
+     * Chance nodes represent random events like:
+     * - Dealing board cards in poker
+     * - Rolling dice
+     * - Drawing cards from a deck
+     *
+     * For external sampling CFR:
+     * - Chance actions: sample ONE (reduces tree size exponentially)
+     * - Player actions: explore ALL (maintains correctness)
+     *
+     * Default: false (assume all actions are player actions)
+     */
+    fun isChanceNode(): Boolean = false
+
+    /**
+     * Sample a random action at a chance node.
+     * Only called when isChanceNode() returns true.
+     *
+     * @return A randomly sampled action according to the chance probability distribution
+     */
+    fun sampleChanceAction(): GameAction {
+        val actions = getLegalActions()
+        require(actions.isNotEmpty()) { "Cannot sample from empty action list" }
+        return actions.random()  // Default: uniform sampling
+    }
 }
 
 /**

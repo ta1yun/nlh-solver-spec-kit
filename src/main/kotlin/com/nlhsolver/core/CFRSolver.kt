@@ -1,6 +1,35 @@
 package com.nlhsolver.core
 
 /**
+ * Sampling modes for CFR.
+ */
+enum class SamplingMode {
+    /**
+     * Vanilla CFR: Traverse entire game tree every iteration.
+     * - Slowest but most straightforward
+     * - Good for small games (Leduc, Kuhn poker)
+     */
+    VANILLA,
+
+    /**
+     * External Sampling CFR: Sample chance outcomes, traverse all player actions.
+     * - 10-100x faster than vanilla for games with chance nodes
+     * - Maintains low variance (only samples nature's actions)
+     * - Recommended for poker (sampling board cards)
+     * - Identical equilibrium to vanilla, just faster convergence
+     */
+    EXTERNAL,
+
+    /**
+     * Outcome Sampling CFR: Sample both chance AND player actions.
+     * - Fastest but highest variance
+     * - Good for very deep trees
+     * - Requires more iterations to converge
+     */
+    OUTCOME
+}
+
+/**
  * Counterfactual Regret Minimization (CFR) Solver.
  *
  * This is a generic CFR solver that works with any sequential game
@@ -20,11 +49,13 @@ package com.nlhsolver.core
  * @param regretDiscountFactor Regret discount factor (default: 1.0 = no discounting)
  *        NOTE: Linear discounting (< 1.0) is currently disabled due to convergence issues.
  *        Use 1.0 for production. May be revisited for performance optimization later.
+ * @param samplingMode Sampling mode (VANILLA, EXTERNAL, or OUTCOME)
  */
 class CFRSolver(
     val numPlayers: Int = 2,
     val enableCFRPlus: Boolean = true,  // Default to true for RM+ optimization
-    val regretDiscountFactor: Double = 1.0  // Default to 1.0 (no discounting)
+    val regretDiscountFactor: Double = 1.0,  // Default to 1.0 (no discounting)
+    val samplingMode: SamplingMode = SamplingMode.EXTERNAL  // Default to external sampling
 ) {
     private val strategyProfile = StrategyProfile()
     private var currentIteration = 0
@@ -84,22 +115,52 @@ class CFRSolver(
         // Get or create info set strategy
         val infoSetStrategy = strategyProfile.getInfoSetStrategy(infoSet, numActions)
 
-        // Get current strategy using regret matching
-        val strategy = infoSetStrategy.getStrategy(reachProbs[currentPlayer])
+        // Check if this is a chance node (nature acts)
+        val isChance = state.isChanceNode()
+
+        // Get current strategy (only for player nodes, not chance)
+        val strategy = if (!isChance) {
+            infoSetStrategy.getStrategy(reachProbs[currentPlayer])
+        } else {
+            DoubleArray(numActions) { 1.0 / numActions }  // Uniform for chance
+        }
 
         // Compute utilities for each action
         val actionUtilities = Array(numActions) { DoubleArray(numPlayers) }
 
-        for (i in actions.indices) {
-            val action = actions[i]
-            val nextState = state.applyAction(action)
+        // External sampling: sample chance nodes, traverse player nodes
+        if (samplingMode == SamplingMode.EXTERNAL && isChance) {
+            // Sample ONE chance outcome instead of traversing all
+            val sampledAction = state.sampleChanceAction()
+            val sampledIndex = actions.indexOfFirst { it.getActionId() == sampledAction.getActionId() }
 
-            // Update reach probabilities for this action
-            val nextReachProbs = reachProbs.copyOf()
-            nextReachProbs[currentPlayer] *= strategy[i]
+            if (sampledIndex >= 0) {
+                val nextState = state.applyAction(sampledAction)
+                val nextReachProbs = reachProbs.copyOf()
+                // For chance nodes, reach probability doesn't change by strategy
+                actionUtilities[sampledIndex] = cfr(nextState, nextReachProbs)
 
-            // Recurse
-            actionUtilities[i] = cfr(nextState, nextReachProbs)
+                // Scale by inverse probability to maintain unbiased estimate
+                val chanceProb = 1.0 / numActions  // Assuming uniform chance distribution
+                for (p in 0 until numPlayers) {
+                    actionUtilities[sampledIndex][p] /= chanceProb
+                }
+            }
+        } else {
+            // Vanilla CFR or player node: traverse all actions
+            for (i in actions.indices) {
+                val action = actions[i]
+                val nextState = state.applyAction(action)
+
+                // Update reach probabilities for this action
+                val nextReachProbs = reachProbs.copyOf()
+                if (!isChance) {
+                    nextReachProbs[currentPlayer] *= strategy[i]
+                }
+
+                // Recurse
+                actionUtilities[i] = cfr(nextState, nextReachProbs)
+            }
         }
 
         // Compute expected utility for current player under current strategy
