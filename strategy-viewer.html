@@ -25,7 +25,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
 <!-- Load recursive Leduc tree -->
-<script src="leduc-tree.js?v=ev-fix-6"></script>
+<script src="leduc-tree.js?v=ev-fix-7"></script>
 
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
@@ -119,7 +119,8 @@ function buildLeducTree() {
           equity: h.equity ?? 0.5,
           evTotal: h.evUniform ?? h.evTotal ?? 0,  // evUniform from new data, fallback to evTotal for compatibility
           evRange: h.evRange ?? h.evUniform ?? h.evTotal ?? 0,  // range-based EV
-          ev: h.ev || {},
+          ev: h.ev || {},  // action EVs vs uniform range
+          evA: h.evA || {},  // action EVs vs actual range
         };
       }
     }
@@ -466,7 +467,8 @@ function DetailPanel({ hand, strategy }) {
           <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:8 }}>STRATEGY</div>
           {strategy.actions.map(a => {
             const freq = hand.freq[a.id] || 0;
-            const ev = hand.ev && hand.ev[a.id] !== undefined ? hand.ev[a.id] : null;
+            const evUni = hand.ev && hand.ev[a.id] !== undefined ? hand.ev[a.id] : null;
+            const evRng = hand.evA && hand.evA[a.id] !== undefined ? hand.evA[a.id] : null;
             if (freq < 0.001) return null;
             return (
               <div key={a.id} style={{ marginBottom:8 }}>
@@ -477,9 +479,10 @@ function DetailPanel({ hand, strategy }) {
                 <div style={{ height:6, background:'rgba(255,255,255,0.06)', borderRadius:3, overflow:'hidden' }}>
                   <div style={{ width:(freq*100)+'%', height:'100%', background:a.color }}/>
                 </div>
-                {ev !== null && (
-                  <div style={{ fontSize:9, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.45)', marginTop:2 }}>
-                    EV: {ev >= 0 ? '+' : ''}{ev.toFixed(2)} BB
+                {(evUni !== null || evRng !== null) && (
+                  <div style={{ fontSize:9, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.45)', marginTop:2, display:'flex', gap:8 }}>
+                    {evUni !== null && <div>U: {evUni >= 0 ? '+' : ''}{evUni.toFixed(2)}</div>}
+                    {evRng !== null && <div>R: {evRng >= 0 ? '+' : ''}{evRng.toFixed(2)}</div>}
                   </div>
                 )}
               </div>

@@ -391,6 +391,41 @@ fun calculateEVForAction(
 }
 
 /**
+ * Calculate EV for taking a specific action against opponent's actual range.
+ */
+fun calculateEVForActionWithRange(
+    state: LeducWithSuitAbstraction,
+    heroHand: LeducHand,
+    action: GameAction,
+    opponentRange: LeducRange,
+    boardCard: Int,
+    boardName: String,
+    profile: StrategyProfile,
+    heroPlayer: Int
+): Double {
+    // Apply the action to get next state
+    val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+
+    // Handle board card for round transitions
+    val nextBoardCard = if (state.round == 1 && nextState.round == 2) {
+        -1  // Transition to R2 - average over all boards
+    } else {
+        nextState.boardCard
+    }
+
+    // Compute opponent's range at the next state
+    // (opponent's range may change based on their response to our action)
+    val nextOpponentPlayer = 1 - heroPlayer
+    val nextOpponentRange = computeOpponentRange(nextState, profile, heroPlayer)
+
+    // Calculate EV from next state with range-based calculation
+    return calculateEVWithRange(
+        nextState, heroHand, nextOpponentRange,
+        nextBoardCard, boardName, profile, heroPlayer
+    )
+}
+
+/**
  * Calculate expected value (EV) for a specific hand at a game state.
  *
  * Returns EV vs uniform opponent range, averaged over all possible opponent cards.
@@ -746,6 +781,15 @@ fun buildTreeNode(
             state.boardCard, boardName, profile, currentPlayer
         )
 
+        // Calculate per-action EV with opponent's actual range
+        val evPerActionRange = actions.mapIndexed { i, action ->
+            val actionEV = calculateEVForActionWithRange(
+                state, heroHand, action, opponentRange,
+                state.boardCard, boardName, profile, currentPlayer
+            )
+            actionNames[i] to actionEV
+        }
+
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")
         js.append("evUniform: ${f(evUniform)}, ")
@@ -755,6 +799,9 @@ fun buildTreeNode(
         js.append("}, ")
         js.append("ev: {")
         js.append(evPerActionUniform.map { (action, ev) -> "$action: ${f(ev)}" }.joinToString(", "))
+        js.append("}, ")
+        js.append("evA: {")
+        js.append(evPerActionRange.map { (action, ev) -> "$action: ${f(ev)}" }.joinToString(", "))
         js.append("} },\n")
     }
 
