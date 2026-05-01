@@ -596,19 +596,15 @@ private fun calculateEVForMatchup(
         for (i in actions.indices) {
             val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
 
-            // Average over all possible boards (excluding ranks held by players)
+            // Average over all possible boards (excluding exact cards held by players)
             var boardEV = 0.0
             var boardCount = 0
-            val p1Rank = p1Card / 2
-            val p2Rank = p2Card / 2
 
-            for (nextBoard in listOf("J", "Q", "K")) {
-                val nextBoardCard = when(nextBoard) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-                val nextBoardRank = nextBoardCard / 2
+            for (nextBoardCard in 0..5) {
+                // Skip if board card is same as either player's card
+                if (nextBoardCard == p1Card || nextBoardCard == p2Card) continue
 
-                // Skip if board rank matches either player's rank (suit abstraction)
-                if (nextBoardRank == p1Rank || nextBoardRank == p2Rank) continue
-
+                val nextBoard = when(nextBoardCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "Q" }
                 val r2State = nextState.copy(boardCard = nextBoardCard)
                 boardEV += calculateEVForMatchup(
                     r2State, p1Card, p2Card, nextBoardCard, nextBoard,
@@ -728,25 +724,27 @@ fun buildTreeNode(
             0.5  // Pre-flop, average across all possible boards
         }
 
-        // Calculate EV using UNIFORM opponent range (baseline)
-        // This assumes opponent has all hands equally likely
-        val evUniform = calculateEV(state, cardIdx, state.boardCard, boardName, profile)
-
-        // Calculate EV using RANGE-BASED opponent distribution (correct)
-        // This accounts for how opponent's range evolved through their equilibrium play
+        // Get current player for EV calculations
         val currentPlayer = state.currentPlayer() ?: 0
-        val opponentRange = computeOpponentRange(state, profile, currentPlayer)
-        val heroHand = LeducHand(cardIdx)
-        val evRange = calculateEVWithRange(
-            state, heroHand, opponentRange,
-            state.boardCard, boardName, profile, currentPlayer
-        )
 
         // Calculate per-action EV with uniform range
         val evPerActionUniform = actions.mapIndexed { i, action ->
             val actionEV = calculateEVForAction(state, cardIdx, state.boardCard, boardName, action, profile, currentPlayer)
             actionNames[i] to actionEV
         }
+
+        // Calculate EV using UNIFORM opponent range (baseline)
+        // This is the weighted average of action EVs
+        val evUniform = evPerActionUniform.mapIndexed { i, (_, ev) -> strategy[i] * ev }.sum()
+
+        // Calculate EV using RANGE-BASED opponent distribution (correct)
+        // This accounts for how opponent's range evolved through their equilibrium play
+        val opponentRange = computeOpponentRange(state, profile, currentPlayer)
+        val heroHand = LeducHand(cardIdx)
+        val evRange = calculateEVWithRange(
+            state, heroHand, opponentRange,
+            state.boardCard, boardName, profile, currentPlayer
+        )
 
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")

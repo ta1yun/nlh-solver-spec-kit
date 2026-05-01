@@ -79,7 +79,7 @@ fun trainSolver(): StrategyProfile {
     }
 
     val solver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
-    repeat(500000) { i ->
+    repeat(2000000) { i ->
         val matchup = allMatchups[i % allMatchups.size]
         solver.train(matchup, iterations = 1)
         if ((i + 1) % 100000 == 0) println("  ${i + 1} iterations")
