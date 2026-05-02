@@ -105,21 +105,29 @@ class CFRSolver(
             return state.getUtility()
         }
 
-        val currentPlayer = state.currentPlayer()
-            ?: error("Non-terminal state must have a current player")
+        // Check if this is a chance node (nature acts)
+        val isChance = state.isChanceNode()
+
+        // Get current player (null for chance nodes)
+        val currentPlayer = if (!isChance) {
+            state.currentPlayer() ?: error("Non-terminal non-chance state must have a current player")
+        } else {
+            null
+        }
 
         val infoSet = state.getInfoSet()
         val actions = state.getLegalActions()
         val numActions = actions.size
 
-        // Get or create info set strategy
-        val infoSetStrategy = strategyProfile.getInfoSetStrategy(infoSet, numActions)
-
-        // Check if this is a chance node (nature acts)
-        val isChance = state.isChanceNode()
+        // Get or create info set strategy (only for player nodes)
+        val infoSetStrategy = if (!isChance && currentPlayer != null) {
+            strategyProfile.getInfoSetStrategy(infoSet, numActions)
+        } else {
+            null
+        }
 
         // Get current strategy (only for player nodes, not chance)
-        val strategy = if (!isChance) {
+        val strategy = if (!isChance && currentPlayer != null && infoSetStrategy != null) {
             infoSetStrategy.getStrategy(reachProbs[currentPlayer])
         } else {
             DoubleArray(numActions) { 1.0 / numActions }  // Uniform for chance
@@ -154,7 +162,7 @@ class CFRSolver(
 
                 // Update reach probabilities for this action
                 val nextReachProbs = reachProbs.copyOf()
-                if (!isChance) {
+                if (!isChance && currentPlayer != null) {
                     nextReachProbs[currentPlayer] *= strategy[i]
                 }
 
@@ -171,18 +179,20 @@ class CFRSolver(
             }
         }
 
-        // Update regrets for the current player
-        val actionValues = DoubleArray(numActions) { i ->
-            actionUtilities[i][currentPlayer]
+        // Update regrets for the current player (only for player nodes, not chance)
+        if (!isChance && currentPlayer != null && infoSetStrategy != null) {
+            val actionValues = DoubleArray(numActions) { i ->
+                actionUtilities[i][currentPlayer]
+            }
+
+            val opponentReachProb = reachProbs.filterIndexed { idx, _ -> idx != currentPlayer }.fold(1.0) { acc, prob -> acc * prob }
+
+            infoSetStrategy.updateRegrets(
+                actionValues = actionValues,
+                nodeValue = nodeUtility[currentPlayer],
+                opponentReachProb = opponentReachProb
+            )
         }
-
-        val opponentReachProb = reachProbs.filterIndexed { idx, _ -> idx != currentPlayer }.fold(1.0) { acc, prob -> acc * prob }
-
-        infoSetStrategy.updateRegrets(
-            actionValues = actionValues,
-            nodeValue = nodeUtility[currentPlayer],
-            opponentReachProb = opponentReachProb
-        )
 
         return nodeUtility
     }
