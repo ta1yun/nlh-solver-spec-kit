@@ -246,10 +246,12 @@ data class LeducWithChanceNodes(
             return "$rank $history"
         }
 
-        // Round 2: rank + board + R2 history
-        val r2History = if ('|' in history) history.substringAfter("|") else ""
+        // Round 2: rank + board + FULL history (including R1)
+        // Must include R1 history because different R1 endings create different pot sizes
+        // which affect optimal play (pot odds)
         val board = rankName(boardCard)
-        return "$rank$board $r2History"
+        val fullHistory = history.replace("|", "d")  // Match baseline format
+        return "$rank$board $fullHistory"
     }
 
     override fun getStateHash(): String {
