@@ -3,7 +3,7 @@ package com.nlhsolver.export
 import com.nlhsolver.core.CFRSolver
 import com.nlhsolver.core.GameAction
 import com.nlhsolver.core.StrategyProfile
-import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.integration.LeducState
 import com.nlhsolver.range.*
 import io.kotest.core.spec.style.FunSpec
 import java.io.File
@@ -34,16 +34,16 @@ class GenerateTreeStructure : FunSpec({
     test("Generate recursive tree structure") {
         println("\n=== Generating Recursive Tree ===\n")
 
-        // Train solver
-        println("Training solver...")
-        val profile = trainSolver()
+        // Train solver with higher iterations, NO oversampling to avoid overfitting
+        println("Training solver with 5M iterations (uniform sampling for clean equilibrium)...")
+        val profile = trainSolver(iterations = 5_000_000, deepScenarioWeight = 0.0)
 
         // Generate tree for each board
         val trees = mutableListOf<String>()
         for (board in listOf("J", "Q", "K")) {
             val boardCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
 
-            val initialState = LeducWithSuitAbstraction(
+            val initialState = LeducState(
                 p1Card = 1, // Sample card
                 p2Card = 3,
                 boardCard = -1, // Board not dealt yet in Round 1
@@ -70,7 +70,7 @@ class GenerateTreeStructure : FunSpec({
         js.appendLine("  };")
         js.appendLine("})();")
 
-        val outputPath = "/Users/tpai/Downloads/leduc-tree.js"
+        val outputPath = "/Users/tpai/Projects/nlh-solver-spec-kit/leduc-tree.js"
         File(outputPath).writeText(js.toString())
 
         println("\n✓ Exported recursive tree to $outputPath")
@@ -100,7 +100,7 @@ class GenerateTreeStructure : FunSpec({
         )
 
         for ((historyStr, description, shouldBeComplete) in testCases) {
-            val state = LeducWithSuitAbstraction(
+            val state = LeducState(
                 p1Card = 1, p2Card = 3, boardCard = 2,
                 round = 1, p1Invested = 1.0, p2Invested = 1.0,
                 history = historyStr
@@ -176,6 +176,77 @@ fun calculateEquity(playerCard: Int, boardCard: Int): Double {
  * @return Opponent's range distribution at this node
  */
 /**
+ * Compute hero's range at a given game state.
+ *
+ * Similar to computeOpponentRange, but computes the current player's range
+ * by replaying their own actions through the history.
+ *
+ * @return Range interface representing hero's range distribution at this node
+ */
+fun computeHeroRange(
+    state: LeducState,
+    profile: StrategyProfile,
+    currentPlayer: Int
+): Range {
+    // Start with uniform range
+    var heroRange: Range = LeducRange.uniform()
+    val propagator = LeducRangePropagator()
+
+    val history = state.history
+    if (history.isEmpty()) {
+        return heroRange  // No actions yet
+    }
+
+    // Split by round separator
+    val rounds = history.split("|", "d")
+
+    // Replay each round
+    var replayState = LeducState(
+        p1Card = 0, p2Card = 2,  // Dummy cards
+        boardCard = -1,
+        round = 1,
+        p1Invested = 1.0,
+        p2Invested = 1.0,
+        history = ""
+    )
+
+    for ((roundIdx, roundHistory) in rounds.withIndex()) {
+        if (roundHistory.isEmpty()) continue
+
+        // If this is round 2, update board card
+        if (roundIdx == 1) {
+            val boardCard = when(state.boardCard / 2) {
+                0 -> 0; 1 -> 2; 2 -> 4; else -> 2
+            }
+            replayState = replayState.copy(boardCard = boardCard, round = 2)
+        }
+
+        // Replay each action in this round
+        var turnPlayer = 0  // P1 always acts first in each round
+        for (actionChar in roundHistory) {
+            val actionId = actionChar.toString()
+            val actions = replayState.getLegalActions()
+            val action = actions.firstOrNull { it.getActionId() == actionId }
+
+            if (action != null) {
+                // If this action was taken by hero, propagate their range
+                if (turnPlayer == currentPlayer) {
+                    heroRange = propagator.propagate(
+                        heroRange, action, replayState, profile
+                    )
+                }
+
+                // Apply action and update turn
+                replayState = replayState.applyAction(action) as LeducState
+                turnPlayer = 1 - turnPlayer
+            }
+        }
+    }
+
+    return heroRange
+}
+
+/**
  * Compute opponent's range at a given game state.
  *
  * This function is game-agnostic - it works for any poker variant by:
@@ -186,7 +257,7 @@ fun calculateEquity(playerCard: Int, boardCard: Int): Double {
  * @return Range interface that can be LeducRange, NLHRange, etc.
  */
 fun computeOpponentRange(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     profile: StrategyProfile,
     currentPlayer: Int
 ): Range {
@@ -208,7 +279,7 @@ fun computeOpponentRange(
     val rounds = history.split("|", "d")
 
     // Replay each round
-    var replayState = LeducWithSuitAbstraction(
+    var replayState = LeducState(
         p1Card = 0, p2Card = 2,  // Dummy cards (doesn't matter for range propagation)
         boardCard = -1,
         round = 1,
@@ -244,7 +315,7 @@ fun computeOpponentRange(
                 }
 
                 // Apply action and update turn
-                replayState = replayState.applyAction(action) as LeducWithSuitAbstraction
+                replayState = replayState.applyAction(action) as LeducState
                 turnPlayer = 1 - turnPlayer
             }
         }
@@ -285,7 +356,7 @@ fun computeOpponentRange(
  * @return Expected value in big blinds from hero's perspective
  */
 fun calculateEVWithRange(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     heroHand: Hand,
     opponentRange: Range,
     boardCard: Int,
@@ -293,11 +364,51 @@ fun calculateEVWithRange(
     profile: StrategyProfile,
     heroPlayer: Int
 ): Double {
+    // Terminal state: return hero's utility
+    if (state.isTerminal()) {
+        val leducHero = heroHand as LeducHand
+        val heroCard = leducHero.cardIdx
+
+        // Filter opponent range to exclude hero's card
+        val validRange = opponentRange.excluding(heroHand)
+
+        // For terminal states, we need to check against each possible opponent card
+        // and average the utilities weighted by opponent range
+        var totalEV = 0.0
+        var totalWeight = 0.0
+
+        val debug = false  // Disabled to reduce output
+        if (debug) println("    [DEBUG] Terminal state: hero=$heroPlayer, heroCard=$heroCard, history=${state.history}")
+
+        for ((oppHand, weight) in validRange.getActiveHands()) {
+            if (weight <= 0.0) continue
+            val oppCard = (oppHand as LeducHand).cardIdx
+
+            // Skip if cards conflict (shouldn't happen after filtering, but be safe)
+            if (oppCard == heroCard) continue
+
+            val (p1Card, p2Card) = if (heroPlayer == 0) Pair(heroCard, oppCard) else Pair(oppCard, heroCard)
+            val finalState = state.copy(p1Card = p1Card, p2Card = p2Card, boardCard = boardCard)
+            val utilities = finalState.getUtility()
+            val heroUtility = utilities[heroPlayer]
+
+            if (debug) println("      oppCard=$oppCard, weight=$weight, heroUtil=$heroUtility")
+
+            totalEV += weight * heroUtility
+            totalWeight += weight
+        }
+
+        val result = if (totalWeight > 0.0) totalEV / totalWeight else 0.0
+        if (debug) println("    [DEBUG] Terminal EV: $result")
+
+        return result
+    }
+
     val round = state.round
     val heroIsP1 = (heroPlayer == 0)
 
-    // Round 1: average over all possible boards (all 6 cards)
-    if (round == 1 && boardCard == -1) {
+    // If boardCard is -1, average over all possible boards (can happen in R1 or during R1->R2 transition)
+    if (boardCard == -1) {
         var totalEV = 0.0
         var boardCount = 0
 
@@ -406,7 +517,7 @@ fun calculateEVWithRange(
  * @return Expected value in big blinds if this action is taken
  */
 fun calculateEVForAction(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     heroCard: Int,
     boardCard: Int,
     boardName: String,
@@ -415,7 +526,7 @@ fun calculateEVForAction(
     heroPlayer: Int
 ): Double {
     // Apply the action to get next state
-    val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+    val nextState = state.applyAction(action) as LeducState
 
     // Handle board card for round transitions
     // If we're transitioning from R1 to R2, nextState.boardCard might be stale
@@ -448,7 +559,7 @@ fun calculateEVForAction(
  * @return Expected value of taking this action, in big blinds
  */
 fun calculateEVForActionWithRange(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     heroHand: Hand,
     action: GameAction,
     opponentRange: Range,
@@ -458,7 +569,7 @@ fun calculateEVForActionWithRange(
     heroPlayer: Int
 ): Double {
     // Apply the action to get next state
-    val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+    val nextState = state.applyAction(action) as LeducState
 
     // Handle board card for round transitions
     val nextBoardCard = if (state.round == 1 && nextState.round == 2) {
@@ -507,7 +618,7 @@ fun calculateEVForActionWithRange(
  * @return Expected value in big blinds vs uniform opponent range
  */
 fun calculateEV(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     heroCard: Int,
     boardCard: Int,
     boardName: String,
@@ -522,7 +633,7 @@ fun calculateEV(
  * Calculate EV with explicit hero player (to preserve perspective across turn changes).
  */
 fun calculateEVWithHero(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     heroCard: Int,
     boardCard: Int,
     boardName: String,
@@ -532,9 +643,8 @@ fun calculateEVWithHero(
     val round = state.round
     val heroIsP1 = (heroPlayer == 0)
 
-    // In Round 1, boardCard is -1 (not dealt yet) - average over all possible boards
-    // In Round 2, use the specific board
-    if (round == 1 && boardCard == -1) {
+    // If boardCard is -1, average over all possible boards (can happen in R1 or during R1->R2 transition)
+    if (boardCard == -1) {
         // Average over all possible board outcomes (all 6 cards)
         var totalEV = 0.0
         var boardCount = 0
@@ -617,7 +727,7 @@ fun calculateEVWithHero(
  * This recursively walks the game tree using equilibrium strategies.
  */
 private fun calculateEVForMatchup(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     p1Card: Int,
     p2Card: Int,
     boardCard: Int,
@@ -676,14 +786,14 @@ private fun calculateEVForMatchup(
 
     // Check if this action transitions to Round 2
     val shouldTransition = state.round == 1 && actions.isNotEmpty() &&
-        (state.applyAction(actions[0]) as LeducWithSuitAbstraction).round == 2
+        (state.applyAction(actions[0]) as LeducState).round == 2
 
     if (shouldTransition) {
         // Chance node after this decision - average over board outcomes
         var totalEV = 0.0
 
         for (i in actions.indices) {
-            val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
+            val nextState = state.applyAction(actions[i]) as LeducState
 
             // Average over all possible boards (excluding exact cards held by players)
             var boardEV = 0.0
@@ -697,7 +807,7 @@ private fun calculateEVForMatchup(
                 val r2State = nextState.copy(boardCard = nextBoardCard)
                 boardEV += calculateEVForMatchup(
                     r2State, p1Card, p2Card, nextBoardCard, nextBoard,
-                    profile, heroIsP1, visited.toMutableSet()
+                    profile, heroIsP1, visited
                 )
                 boardCount++
             }
@@ -711,10 +821,10 @@ private fun calculateEVForMatchup(
         var totalEV = 0.0
 
         for (i in actions.indices) {
-            val nextState = state.applyAction(actions[i]) as LeducWithSuitAbstraction
+            val nextState = state.applyAction(actions[i]) as LeducState
             val actionEV = calculateEVForMatchup(
                 nextState, p1Card, p2Card, boardCard, boardName,
-                profile, heroIsP1, visited.toMutableSet()
+                profile, heroIsP1, visited
             )
             totalEV += strategy[i] * actionEV
         }
@@ -724,7 +834,7 @@ private fun calculateEVForMatchup(
 }
 
 fun buildTreeNode(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     boardName: String,
     profile: StrategyProfile,
     visited: MutableSet<String>
@@ -773,26 +883,58 @@ fun buildTreeNode(
     val actionsJson = actionNames.joinToString(", ") { "\"$it\"" }
     js.append("      actions: [$actionsJson],\n")
 
-    // Strategies
-    js.append("      hands: [\n")
+    // Compute hero's range at this node
+    val currentPlayer = state.currentPlayer() ?: 0
+    val heroRange = computeHeroRange(state, profile, currentPlayer)
 
+    // Filter out board card in R2
+    val validHeroRange = if (round == 2) {
+        val boardCard = when(boardName) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
+        heroRange.excluding(LeducHand(boardCard))
+    } else {
+        heroRange
+    }
+
+    // Collect all hands with their range weights first (for normalization)
+    val handsData = mutableListOf<Triple<String, String, Int>>()
     val boardCard = when(boardName) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-    val boardRank = boardName
 
     for ((cardId, rank, cardIdx) in listOf(
         Triple("Ka", "K", 4), Triple("Kb", "K", 5),
         Triple("Qa", "Q", 2), Triple("Qb", "Q", 3),
         Triple("Ja", "J", 0), Triple("Jb", "J", 1)
     )) {
-        // Only filter board card in Round 2 (board hasn't been dealt yet in Round 1)
+        // Only filter board card in Round 2
         if (round == 2 && cardIdx == boardCard) continue
+        handsData.add(Triple(cardId, rank, cardIdx))
+    }
+
+    // Normalize range weights to sum to 1.0
+    val rawRangeWeights = handsData.map { (_, _, cardIdx) ->
+        val heroHand = LeducHand(cardIdx)
+        validHeroRange.getActiveHands().firstOrNull { it.first == heroHand }?.second ?: 0.0
+    }
+    val totalWeight = rawRangeWeights.sum()
+    val normalizedWeights = if (totalWeight > 0.0) {
+        rawRangeWeights.map { it / totalWeight }
+    } else {
+        rawRangeWeights.map { 1.0 / handsData.size }
+    }
+
+    // Strategies
+    js.append("      hands: [\n")
+
+    val boardRank = boardName
+
+    for ((index, handData) in handsData.withIndex()) {
+        val (cardId, rank, cardIdx) = handData
 
         // Convert history: replace | with d to match solver format
         val solverHistory = history.replace("|", "d")
 
         // Round 1: info set is just rank (e.g., "K ")
         // Round 2: info set is rank+board WITHOUT dash (e.g., "KQ ")
-        // This matches LeducWithSuitAbstraction.getInfoSet() which uses
+        // This matches LeducState.getInfoSet() which uses
         // getCanonicalHand(...).replace("-", "") in Round 2
         val infoSetKey = if (round == 1) {
             "$rank $solverHistory"
@@ -844,10 +986,14 @@ fun buildTreeNode(
             actionNames[i] to actionEV
         }
 
+        // Get normalized range weight for this hand
+        val rangeWeight = normalizedWeights[index]
+
         js.append("        { id: \"$cardId\", label: \"$rank${if (cardIdx % 2 == 0) "♠" else "♥"}\", ")
         js.append("equity: ${f(equity)}, ")
         js.append("evUniform: ${f(evUniform)}, ")
         js.append("evRange: ${f(evRange)}, ")
+        js.append("rangeWeight: ${f(rangeWeight)}, ")
         js.append("freq: {")
         js.append(actionNames.mapIndexed { i, action -> "$action: ${f(strategy[i])}" }.joinToString(", "))
         js.append("}, ")
@@ -865,7 +1011,7 @@ fun buildTreeNode(
     js.append("      children: {\n")
 
     for ((action, actionName) in actions.zip(actionNames)) {
-        val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+        val nextState = state.applyAction(action) as LeducState
 
         // CHANCE NODE DETECTION:
         // A chance node (board dealing) appears when a betting round completes.
@@ -882,21 +1028,25 @@ fun buildTreeNode(
         //
         // This same pattern generalizes to NLH where betting rounds end when
         // all active players have matched the pot and the last action was passive.
-        val shouldTransition = state.round == 1 && nextState.round == 2
+        val shouldTransition = nextState.isChanceNode()
 
         if (shouldTransition) {
             // Betting round complete - insert chance node for board dealing
             js.append("        $actionName: { chance: true, outcomes: [\n")
             for (nextBoard in listOf("J", "Q", "K")) {
                 val nextBoardCard = when(nextBoard) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-                val r2State = nextState.copy(boardCard = nextBoardCard)
-                val subtree = buildTreeNode(r2State, nextBoard, profile, visited.toMutableSet())
+                val r2State = nextState.copy(
+                    boardCard = nextBoardCard,
+                    round = 2,
+                    history = nextState.history + "|"
+                )
+                val subtree = buildTreeNode(r2State, nextBoard, profile, visited)
                 js.append("          { board: \"${nextBoard}♠\", node: $subtree },\n")
             }
             js.append("        ] },\n")
         } else {
             // Betting round continues - normal child node
-            val subtree = buildTreeNode(nextState, boardName, profile, visited.toMutableSet())
+            val subtree = buildTreeNode(nextState, boardName, profile, visited)
             js.append("        $actionName: $subtree,\n")
         }
     }

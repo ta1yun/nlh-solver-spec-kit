@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leduc Solver — Range-Weighted Strategy Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#06070a; color:#fff; font-family: 'Inter', system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  ::selection { background: rgba(34,197,94,0.4); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- Load recursive Leduc tree -->
+<script src="leduc-tree.js?v=range-weighted-11"></script>
+
+<script type="text/babel">
+const { useState, useMemo, useEffect } = React;
+
+/**
+ * CHANCE NODE CONCEPT (Generalized for all poker variants)
+ *
+ * Chance nodes (board dealing) appear exactly when betting rounds complete.
+ * A betting round is complete when:
+ * 1. All active players have equal investment (pot is "capped")
+ * 2. The last action was passive (check or call, not bet or raise)
+ * 3. At least one action has been taken
+ *
+ * In Leduc, this happens after:
+ * - "xx"   (both check)
+ * - "bc"   (bet-call)
+ * - "brc"  (bet-raise-call)
+ * - "xbc"  (check-bet-call)
+ * - "xbrc" (check-bet-raise-call)
+ *
+ * In NLH, the same logic applies but with more complex bet sizing.
+ * The PokerGameState.isBettingRoundComplete() method implements this.
+ *
+ * This pattern is fundamental to all poker game trees.
+ */
+
+// Adapter: Convert recursive tree to flat node structure for UI
+function buildLeducTree() {
+  const ACT = {
+    fold:  { id:'fold',  label:'Fold',  color:'#e5484d' },
+    check: { id:'check', label:'Check', color:'#8b8d98' },
+    call:  { id:'call',  label:'Call',  color:'#3b82f6' },
+    bet:   { id:'bet',   label:'Bet',   color:'#f59e0b' },
+    raise: { id:'raise', label:'Raise', color:'#22c55e' },
+  };
+
+  const RECURSIVE_TREE = window.LEDUC_TREE;
+  if (!RECURSIVE_TREE) {
+    console.error('LEDUC_TREE not loaded! Make sure leduc-tree.js is in the same directory.');
+    return null;
+  }
+  console.log('✓ Loaded recursive tree with', Object.keys(RECURSIVE_TREE).length, 'root boards');
+
+  // Flatten recursive tree into node ID structure
+  const nodes = {};
+  let nodeCounter = 0;
+
+  // Recursively flatten tree nodes and assign IDs
+  function flattenNode(recursiveNode, board, path = '') {
+    if (!recursiveNode) return null;
+
+    // Generate unique ID
+    const nodeId = `node_${nodeCounter++}`;
+
+    // Handle terminal nodes
+    if (recursiveNode.terminal) {
+      nodes[nodeId] = {
+        kind: 'terminal',
+        outcome: recursiveNode.outcome || 'showdown',
+        label: 'Game Over',
+      };
+      return nodeId;
+    }
+
+    // Handle chance nodes (board selection)
+    if (recursiveNode.chance) {
+      const children = recursiveNode.outcomes.map(outcome => {
+        // Reset path for Round 2 - P1 always acts first after board is dealt
+        const childId = flattenNode(outcome.node, outcome.board.charAt(0), '');
+        return {
+          label: outcome.board,
+          board: outcome.board.charAt(0),
+          nodeId: childId,
+        };
+      });
+
+      nodes[nodeId] = {
+        kind: 'chance',
+        label: 'Deal board card',
+        children,
+      };
+      return nodeId;
+    }
+
+    // Decision node - convert hands array to strategies object
+    const strategies = {};
+    if (recursiveNode.hands) {
+      for (const h of recursiveNode.hands) {
+        strategies[h.id] = {
+          freq: { ...h.freq },
+          equity: h.equity ?? 0.5,
+          evTotal: h.evUniform ?? h.evTotal ?? 0,  // evUniform from new data, fallback to evTotal for compatibility
+          evRange: h.evRange ?? h.evUniform ?? h.evTotal ?? 0,  // range-based EV
+          ev: h.ev || {},  // action EVs vs uniform range
+          evA: h.evA || {},  // action EVs vs actual range
+          rangeWeight: h.rangeWeight ?? 1.0,  // range weight for range-weighted display
+        };
+      }
+    }
+
+    // Get metadata
+    const meta = recursiveNode.meta || {};
+    const round = meta.round || 1;
+    const pot = meta.pot || 2;
+    const toCall = meta.toCall || 0;
+
+    // Determine player from path length (P1 always acts first in R2)
+    const historyLength = path.length;
+    const player = historyLength % 2 === 0 ? 'P1' : 'P2';
+
+    // Convert action names to action objects
+    const actionObjects = recursiveNode.actions?.map(a => ACT[a]).filter(Boolean) || [];
+
+    // Flatten children recursively
+    const children = {};
+    if (recursiveNode.children) {
+      for (const [actionName, childNode] of Object.entries(recursiveNode.children)) {
+        children[actionName] = flattenNode(childNode, board, path + actionName.charAt(0));
+      }
+    }
+
+    // Create decision node
+    nodes[nodeId] = {
+      kind: 'decision',
+      round,
+      pot,
+      toCall,
+      player,
+      board,
+      label: `Round ${round} — ${player} to act`,
+      actions: actionObjects,
+      strategies,
+      children,
+    };
+
+    return nodeId;
+  }
+
+  // Flatten all three board roots (they represent the same game tree)
+  const jRoot = flattenNode(RECURSIVE_TREE.j, 'J');
+  const qRoot = flattenNode(RECURSIVE_TREE.q, 'Q');
+  const kRoot = flattenNode(RECURSIVE_TREE.k, 'K');
+
+  // The root points to Q board's starting node (Round 1, P1 to act)
+  // Note: j, q, k roots are equivalent in Round 1 since board isn't dealt yet
+  const root = qRoot;
+
+  console.log('✓ Flattened', Object.keys(nodes).length, 'nodes from recursive tree');
+
+  // Helper functions for UI
+  function nodeToStrategy(nodeId) {
+    const node = nodes[nodeId];
+    if (!node || node.kind !== 'decision') return null;
+
+    const cardMeta = {
+      Ka:{rank:'K',suit:'♠'}, Kb:{rank:'K',suit:'♥'},
+      Qa:{rank:'Q',suit:'♠'}, Qb:{rank:'Q',suit:'♥'},
+      Ja:{rank:'J',suit:'♠'}, Jb:{rank:'J',suit:'♥'},
+    };
+
+    const hands = Object.entries(node.strategies).map(([id, s]) => ({
+      id, label: cardMeta[id].rank + cardMeta[id].suit,
+      rank: cardMeta[id].rank, suit: cardMeta[id].suit,
+      combos:1, ...s,
+    }));
+
+    return {
+      game:'leduc', handShape:'tile',
+      meta:{
+        street:'round'+node.round, pot:node.pot, toCall:node.toCall,
+        stack:10-node.pot, position:node.player, board:[],
+      },
+      actions: node.actions,
+      hands,
+    };
+  }
+
+  function boardRankOf(nodeId) {
+    const node = nodes[nodeId];
+    if (!node) return null;
+    return node.board || null;
+  }
+
+  function swapBoard(currentNodeId, targetRank) {
+    // Find corresponding node with different board
+    // This is a simplified version - in the recursive tree,
+    // swapping boards means navigating to a parallel branch
+    const currentNode = nodes[currentNodeId];
+    if (!currentNode) return null;
+
+    // For now, return null - board swapping is more complex with recursive structure
+    // The UI can handle this gracefully
+    return null;
+  }
+
+  return { nodes, root, nodeToStrategy, ACT, boardRankOf, swapBoard };
+}
+
+// ============================================================
+// Components
+// ============================================================
+
+function LeducCard({ hand, actions, visibleActions, selected, hovered, onHover, onClick, rangeWeighted, allHands }) {
+  const acts = actions.filter(a => visibleActions[a.id]);
+  const isRed = hand.suit === '♥' || hand.suit === '♦';
+
+  // Calculate bar widths based on mode
+  let barWidths;
+  if (rangeWeighted && allHands) {
+    // Range-weighted: show contribution to overall range strategy
+    // Total weight across all hands for normalization
+    const totalWeight = allHands.reduce((sum, h) => sum + (h.rangeWeight || 0), 0);
+
+    // For each action, calculate this hand's contribution to the range strategy
+    const contributions = acts.map(a => ({
+      action: a,
+      contribution: (hand.freq[a.id] || 0) * (hand.rangeWeight || 0)
+    }));
+
+    const totalContribution = contributions.reduce((sum, c) => sum + c.contribution, 0);
+
+    barWidths = contributions.map(c => ({
+      action: c.action,
+      width: totalContribution > 0.001 ? (c.contribution / totalContribution) : 0
+    }));
+  } else {
+    // Per-hand: show this hand's individual strategy
+    const total = acts.reduce((s,a)=>s+(hand.freq[a.id]||0),0)||1;
+    barWidths = acts.map(a => ({
+      action: a,
+      width: (hand.freq[a.id]||0)/total
+    }));
+  }
+
+  return (
+    <div
+      onMouseEnter={()=>onHover&&onHover(hand)}
+      onMouseLeave={()=>onHover&&onHover(null)}
+      onClick={()=>onClick&&onClick(hand)}
+      style={{
+
+        position:'relative', width:90, height:128, borderRadius:8, cursor:'pointer',
+        background:'#fff',
+        border: selected ? '2px solid #fff' : hovered ? '2px solid rgba(255,255,255,0.45)' : '2px solid transparent',
+        boxShadow: selected ? '0 0 0 3px rgba(255,255,255,0.15), 0 8px 22px rgba(0,0,0,0.45)' : '0 6px 16px rgba(0,0,0,0.35)',
+        overflow:'hidden',
+        transition:'transform 140ms, border-color 140ms',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+      }}>
+      <div style={{ position:'absolute', top:8, left:10, fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
+      <div style={{ position:'absolute', top:26, left:11, fontFamily:'Inter, sans-serif', fontSize:14, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.suit}</div>
+      <div style={{ position:'absolute', bottom:8, right:10, transform:'rotate(180deg)', fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
+      {(() => {
+        const cardHeight = 128;
+        const barHeight = (hand.rangeWeight || 0) * cardHeight;
+        return (
+          <div style={{ position:'absolute', left:0, right:0, bottom:0, height:barHeight, display:'flex' }}>
+            {barWidths.map(({ action, width }) => {
+              if (width <= 0.001) return null;
+              return <div key={action.id} style={{ width: (width*100)+'%', background:action.color, opacity:0.85, transition:'width 200ms, height 200ms' }}/>;
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function LeducTiles({ strategy, rangeWeighted, ...cellProps }) {
+  return (
+    <div style={{ padding:24, borderRadius:6, background:'#0a0b0f', border:'1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.5)', marginBottom:12, letterSpacing:'0.06em' }}>HERO HOLDING</div>
+      <div style={{ display:'flex', gap:14 }}>
+        {strategy.hands.map(h => (
+          <div key={h.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+            <LeducCard hand={h} rangeWeighted={rangeWeighted} allHands={strategy.hands} {...cellProps} />
+            <div style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:9, color:'rgba(255,255,255,0.4)', textAlign:'center', lineHeight:1.4 }}>
+              <div>U: {h.evTotal >= 0 ? '+' : ''}{h.evTotal.toFixed(2)}</div>
+              <div>R: {h.evRange >= 0 ? '+' : ''}{h.evRange.toFixed(2)}</div>
+              <div style={{ color: 'rgba(163, 230, 53, 0.6)' }}>W: {(h.rangeWeight || 0).toFixed(2)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GameTreePlayer({ history, currentNode, onAction, onChance, onReset, onUndo, onJump }) {
+  return (
+    <div style={{
+      background:'#0a0b0f',
+      border:'1px solid rgba(255,255,255,0.06)',
+      borderRadius:6,
+      padding:'14px 16px',
+      marginBottom:18,
+    }}>
+      {/* Breadcrumb */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+        <span style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em' }}>
+          LINE
+        </span>
+        <button onClick={() => onJump(0)} style={crumbBtn(history.length === 0)}>start</button>
+        {history.map((h, i) => (
+          <React.Fragment key={i}>
+            <span style={{ color:'rgba(255,255,255,0.25)', fontSize:11 }}>›</span>
+            <button onClick={() => onJump(i+1)} style={{
+              ...crumbBtn(i === history.length - 1),
+              borderLeft: '2px solid ' + (h.color || 'rgba(255,255,255,0.2)'),
+            }}>
+              <span style={{ color:'rgba(255,255,255,0.45)', marginRight:6, fontSize:10 }}>{h.player || ''}</span>
+              {h.label}
+            </button>
+          </React.Fragment>
+        ))}
+        <div style={{ flex:1 }}/>
+        {history.length > 0 && (
+          <>
+            <button onClick={onUndo} style={iconBtn}>↶ Undo</button>
+            <button onClick={onReset} style={iconBtn}>Reset</button>
+          </>
+        )}
+      </div>
+
+      {/* Current node */}
+      <NodeFooter currentNode={currentNode} onAction={onAction} onChance={onChance} />
+    </div>
+  );
+}
+
+function NodeFooter({ currentNode, onAction, onChance }) {
+  if (!currentNode) return null;
+
+  if (currentNode.kind === 'terminal') {
+    return (
+      <div style={{
+        display:'flex', alignItems:'center', gap:12,
+        padding:'10px 12px', borderRadius:5,
+        background:'rgba(134, 239, 172, 0.06)',
+        border:'1px solid rgba(134, 239, 172, 0.2)',
+      }}>
+        <div style={{ width:8, height:8, borderRadius:'50%', background:'#86efac' }}/>
+        <div style={{ fontSize:12, color:'#fff' }}>{currentNode.label}</div>
+      </div>
+    );
+  }
+
+  if (currentNode.kind === 'chance') {
+    return (
+      <div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', marginBottom:8 }}>
+          {currentNode.label}
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          {currentNode.children.map((c, i) => (
+            <button key={i} onClick={() => onChance(c)} style={{
+              padding:'8px 14px', borderRadius:5,
+              background:'#fff', color:'#0a0a0a',
+              border:'2px solid transparent', cursor:'pointer',
+              fontFamily:'Inter, sans-serif', fontWeight:600, fontSize:13,
+            }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // decision
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+        <PlayerBadge player={currentNode.player}/>
+        <div style={{ fontSize:13, color:'#fff', fontWeight:500 }}>{currentNode.label}</div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:14, fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.45)' }}>
+          <span>POT {currentNode.pot}</span>
+          {currentNode.toCall > 0 && <span>TO CALL {currentNode.toCall}</span>}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        {currentNode.actions.map(a => (
+          <button key={a.id} onClick={() => onAction(a, currentNode)} style={{
+            padding:'8px 16px', borderRadius:5,
+            background: a.color, color:'#fff',
+            border:'none', cursor:'pointer',
+            fontFamily:'Inter, sans-serif', fontWeight:600, fontSize:12,
+            boxShadow:'0 1px 0 rgba(255,255,255,0.1) inset, 0 1px 2px rgba(0,0,0,0.3)',
+          }}>{a.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PlayerBadge = ({ player }) => {
+  const isHero = player === 'P1';
+  return (
+    <div style={{
+      display:'inline-flex', alignItems:'center', gap:5,
+      padding:'2px 7px', borderRadius:3,
+      background: isHero ? 'rgba(163, 230, 53, 0.15)' : 'rgba(252, 165, 165, 0.12)',
+      border: '1px solid ' + (isHero ? 'rgba(163, 230, 53, 0.3)' : 'rgba(252, 165, 165, 0.25)'),
+    }}>
+      <div style={{
+        width:5, height:5, borderRadius:'50%',
+        background: isHero ? '#a3e635' : '#fca5a5',
+      }}/>
+      <span style={{
+        fontFamily:'"JetBrains Mono", monospace', fontSize:10,
+        color: isHero ? '#a3e635' : '#fca5a5',
+      }}>{player}</span>
+    </div>
+  );
+};
+
+const crumbBtn = (active) => ({
+  padding:'4px 9px', borderRadius:3,
+  background: active ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.025)',
+  color: active ? '#fff' : 'rgba(255,255,255,0.65)',
+  border:'1px solid ' + (active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)'),
+  cursor:'pointer',
+  fontFamily:'Inter, sans-serif', fontSize:11,
+});
+
+const iconBtn = {
+  padding:'4px 9px', borderRadius:3,
+  background:'transparent',
+  color:'rgba(255,255,255,0.55)',
+  border:'1px solid rgba(255,255,255,0.08)',
+  cursor:'pointer',
+  fontFamily:'Inter, sans-serif', fontSize:11,
+};
+
+function DetailPanel({ hand, strategy }) {
+  if (!hand) {
+    return (
+      <div>
+        <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>DETAILS</div>
+        <div style={{ padding:16, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11, color:'rgba(255,255,255,0.5)', lineHeight:1.6 }}>
+          Hover or click a hand to inspect.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>HAND DETAIL</div>
+      <div style={{ padding:16, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
+        <div style={{ fontSize:14, fontWeight:600, marginBottom:12, color:'#fff' }}>{hand.label || hand.id}</div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:14, fontSize:11 }}>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EQUITY</div>
+            <div style={{ color:'#fff', fontFamily:'"JetBrains Mono", monospace' }}>{(hand.equity*100).toFixed(1)}%</div>
+          </div>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV (UNI)</div>
+            <div style={{ color: hand.evTotal >= 0 ? '#86efac' : '#fca5a5', fontFamily:'"JetBrains Mono", monospace' }}>
+              {hand.evTotal >= 0 ? '+' : ''}{hand.evTotal.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:4 }}>EV (RNG)</div>
+            <div style={{ color: hand.evRange >= 0 ? '#86efac' : '#fca5a5', fontFamily:'"JetBrains Mono", monospace' }}>
+              {hand.evRange >= 0 ? '+' : ''}{hand.evRange.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop:14 }}>
+          <div style={{ color:'rgba(255,255,255,0.5)', fontSize:9, fontFamily:'"JetBrains Mono", monospace', marginBottom:8 }}>STRATEGY</div>
+          {strategy.actions.map(a => {
+            const freq = hand.freq[a.id] || 0;
+            const evUni = hand.ev && hand.ev[a.id] !== undefined ? hand.ev[a.id] : null;
+            const evRng = hand.evA && hand.evA[a.id] !== undefined ? hand.evA[a.id] : null;
+            if (freq < 0.001) return null;
+            return (
+              <div key={a.id} style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, fontSize:10 }}>
+                  <span style={{ color:'rgba(255,255,255,0.75)' }}>{a.label}</span>
+                  <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.6)' }}>{(freq*100).toFixed(0)}%</span>
+                </div>
+                <div style={{ height:6, background:'rgba(255,255,255,0.06)', borderRadius:3, overflow:'hidden' }}>
+                  <div style={{ width:(freq*100)+'%', height:'100%', background:a.color }}/>
+                </div>
+                {(evUni !== null || evRng !== null) && (
+                  <div style={{ fontSize:9, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.45)', marginTop:2, display:'flex', gap:8 }}>
+                    {evUni !== null && <div>U: {evUni >= 0 ? '+' : ''}{evUni.toFixed(2)}</div>}
+                    {evRng !== null && <div>R: {evRng >= 0 ? '+' : ''}{evRng.toFixed(2)}</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionLegend({ actions, visibleActions, setVisible }) {
+  return (
+    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+      {actions.map(a => (
+        <button
+          key={a.id}
+          onClick={() => setVisible({ ...visibleActions, [a.id]: !visibleActions[a.id] })}
+          style={{
+            padding:'5px 10px',
+            borderRadius:4,
+            background: visibleActions[a.id] ? a.color : 'rgba(255,255,255,0.05)',
+            color: visibleActions[a.id] ? '#fff' : 'rgba(255,255,255,0.35)',
+            border:'1px solid ' + (visibleActions[a.id] ? a.color : 'rgba(255,255,255,0.08)'),
+            cursor:'pointer',
+            fontFamily:'Inter, sans-serif',
+            fontSize:11,
+            fontWeight:500,
+            opacity: visibleActions[a.id] ? 1 : 0.5,
+          }}>
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BoardPicker({ currentRank, onPickRank, TREE, currentNodeId, setCurrentNodeId, history, setHistory }) {
+  const isR2 = currentRank !== null;
+  const ranks = ['K', 'Q', 'J'];
+
+  if (!isR2) {
+    return (
+      <div>
+        <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>BOARD</div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>
+          No board yet (Round 1)
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>BOARD</div>
+      <div style={{ display:'flex', gap:6 }}>
+        {ranks.map(r => (
+          <button
+            key={r}
+            onClick={() => {
+              const next = TREE.swapBoard(currentNodeId, r);
+              if (next) {
+                setCurrentNodeId(next);
+                if (history.length > 0) {
+                  setHistory(h => [
+                    ...h.slice(0, -1),
+                    { ...h[h.length-1], label: r + '♠', nodeId: next },
+                  ]);
+                }
+              }
+            }}
+            style={{
+              padding:'6px 10px',
+              borderRadius:4,
+              background: r === currentRank ? '#fff' : 'rgba(255,255,255,0.06)',
+              color: r === currentRank ? '#0a0a0a' : 'rgba(255,255,255,0.65)',
+              border: r === currentRank ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+              cursor:'pointer',
+              fontFamily:'Inter, sans-serif',
+              fontSize:12,
+              fontWeight:600,
+            }}>
+            {r}♠
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Main App
+// ============================================================
+
+function App() {
+  const TREE = useMemo(() => buildLeducTree(), []);
+
+  // Show error if tree didn't load
+  if (!TREE) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ background: '#1a1a1a', border: '2px solid #ef4444', borderRadius: '8px', padding: '1.5rem' }}>
+          <h2 style={{ color: '#ef4444', marginBottom: '1rem' }}>Error: Game Tree Not Loaded</h2>
+          <p style={{ color: '#ccc', lineHeight: 1.6 }}>
+            The Leduc Hold'em scenarios could not be loaded. Make sure <code style={{background: '#0a0a0a', padding: '2px 6px', borderRadius: '3px'}}>leduc-complete.js</code> is in the same directory as this HTML file.
+          </p>
+          <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '1rem' }}>
+            Check the browser console (F12) for more details.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const [history, setHistory] = useState([]);
+  const [currentNodeId, setCurrentNodeId] = useState(TREE ? TREE.root : null);
+  const currentNode = TREE && currentNodeId ? TREE.nodes[currentNodeId] : null;
+
+  const strategy = useMemo(() => {
+    if (!TREE || !currentNode || currentNode.kind !== 'decision') return null;
+    return TREE.nodeToStrategy(currentNodeId);
+  }, [currentNodeId]);
+
+  const [hovered, setHovered] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [visibleActions, setVisibleActions] = useState({});
+  const [rangeWeighted, setRangeWeighted] = useState(false);
+
+  // Initialize visible actions when strategy changes
+  useEffect(() => {
+    if (!strategy) { setVisibleActions({}); return; }
+    const v = {};
+    for (const a of strategy.actions) v[a.id] = true;
+    setVisibleActions(v);
+    setHovered(null);
+    setSelected(null);
+  }, [currentNodeId]);
+
+  // Tree handlers
+  const playAction = (action, node) => {
+    const next = node.children[action.id];
+    setHistory(h => [...h, { player: node.player, label: action.label, color: action.color, nodeId: next }]);
+    setCurrentNodeId(next);
+  };
+
+  const playChance = (choice) => {
+    setHistory(h => [...h, { player: 'CHANCE', label: choice.label, color: 'rgba(255,255,255,0.3)', nodeId: choice.nodeId }]);
+    setCurrentNodeId(choice.nodeId);
+  };
+
+  const undoMove = () => {
+    if (history.length === 0) return;
+    const nh = history.slice(0, -1);
+    setHistory(nh);
+    setCurrentNodeId(nh.length === 0 ? TREE.root : nh[nh.length-1].nodeId);
+  };
+
+  const resetTree = () => {
+    setHistory([]);
+    setCurrentNodeId(TREE.root);
+  };
+
+  const jumpTo = (idx) => {
+    if (idx === 0) { setHistory([]); setCurrentNodeId(TREE.root); return; }
+    const nh = history.slice(0, idx);
+    setHistory(nh);
+    setCurrentNodeId(nh[nh.length-1].nodeId);
+  };
+
+  if (!TREE) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20 }}>
+        <div style={{ fontSize:16, color:'rgba(255,255,255,0.6)' }}>
+          No solver data loaded. Please load leduc-solution.js
+        </div>
+      </div>
+    );
+  }
+
+  const cellProps = strategy ? {
+    actions: strategy.actions,
+    visibleActions,
+    weighted: false,
+    selected,
+    hovered,
+    onHover: setHovered,
+    onClick: (h) => setSelected(selected && selected.id === h.id ? null : h),
+  } : null;
+
+  const focused = hovered || selected;
+  const showRange = !!strategy;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#06070a', color:'#fff', fontFamily:'Inter, system-ui, sans-serif' }}>
+      {/* Toolbar */}
+      <div style={{
+        height:49,
+        borderBottom:'1px solid rgba(255,255,255,0.06)',
+        display:'flex',
+        alignItems:'center',
+        padding:'0 20px',
+        background:'#08090d',
+      }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#fff' }}>Leduc Solver — Game Tree Player</div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'232px 1fr 304px', gap:0, minHeight:'calc(100vh - 49px)' }}>
+        {/* LEFT SIDEBAR */}
+        <aside style={{ borderRight:'1px solid rgba(255,255,255,0.06)', padding:'18px 18px', display:'flex', flexDirection:'column', gap:24, background:'#08090d' }}>
+          <BoardPicker
+            currentRank={TREE.boardRankOf(currentNodeId)}
+            onPickRank={(r) => {}}
+            TREE={TREE}
+            currentNodeId={currentNodeId}
+            setCurrentNodeId={setCurrentNodeId}
+            history={history}
+            setHistory={setHistory}
+          />
+          <div>
+            <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em' }}>HISTORY</div>
+            <div style={{ marginTop:10, fontSize:11, fontFamily:'Inter, sans-serif', color:'rgba(255,255,255,0.7)', lineHeight:1.7 }}>
+              {history.length === 0 && <div style={{ color:'rgba(255,255,255,0.4)', fontStyle:'italic' }}>No moves yet.</div>}
+              {history.map((h, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <div style={{ width:4, height:4, borderRadius:'50%', background: h.color || 'rgba(255,255,255,0.4)' }}/>
+                  <span style={{ fontFamily:'"JetBrains Mono", monospace', fontSize:10, color:'rgba(255,255,255,0.45)', minWidth:24 }}>
+                    {h.player}
+                  </span>
+                  <span>{h.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:10 }}>NODE</div>
+            <div style={{ fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.55)', wordBreak:'break-all' }}>
+              {currentNodeId}
+            </div>
+          </div>
+        </aside>
+
+        {/* CENTER */}
+        <main style={{ padding:'24px 28px', overflow:'auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+            <div>
+              <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em' }}>
+                LEDUC · GAME TREE
+              </div>
+              <h1 style={{ margin:'4px 0 0', fontSize:18, fontWeight:600, letterSpacing:'-0.01em' }}>
+                Interactive tree player
+              </h1>
+            </div>
+            {strategy && <ActionLegend actions={strategy.actions} visibleActions={visibleActions} setVisible={setVisibleActions}/>}
+          </div>
+
+          <GameTreePlayer
+            history={history}
+            currentNode={currentNode}
+            onAction={playAction}
+            onChance={playChance}
+            onReset={resetTree}
+            onUndo={undoMove}
+            onJump={jumpTo}
+          />
+
+          {showRange ? (
+            <>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                <div style={{ fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.5)' }}>
+                  Card frequencies
+                </div>
+                <button
+                  onClick={() => setRangeWeighted(!rangeWeighted)}
+                  style={{
+                    padding:'5px 10px',
+                    borderRadius:4,
+                    background: rangeWeighted ? 'rgba(163, 230, 53, 0.15)' : 'rgba(255,255,255,0.06)',
+                    color: rangeWeighted ? '#a3e635' : 'rgba(255,255,255,0.65)',
+                    border: rangeWeighted ? '1px solid rgba(163, 230, 53, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                    cursor:'pointer',
+                    fontFamily:'"JetBrains Mono", monospace',
+                    fontSize:10,
+                    transition:'all 150ms'
+                  }}
+                >
+                  {rangeWeighted ? '✓ Range-weighted' : 'Per-hand'}
+                </button>
+              </div>
+              <div style={{ display:'inline-block', position:'relative' }}>
+                <LeducTiles strategy={strategy} rangeWeighted={rangeWeighted} {...cellProps}/>
+              </div>
+              <div style={{ marginTop:18, fontSize:11, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.35)' }}>
+                {rangeWeighted
+                  ? 'Bars show each hand\'s contribution to overall range strategy. Click an action above to continue.'
+                  : 'Bars show each hand\'s individual strategy. Click an action above to continue.'}
+              </div>
+            </>
+          ) : (
+            <div style={{
+              padding:'32px 28px', borderRadius:6,
+              background:'#0a0b0f', border:'1px solid rgba(255,255,255,0.06)',
+              maxWidth:520,
+            }}>
+              <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em' }}>
+                {currentNode && currentNode.kind === 'terminal' ? 'TERMINAL' : 'CHANCE NODE'}
+              </div>
+              <div style={{ marginTop:8, fontSize:15, color:'#fff', lineHeight:1.5 }}>
+                {currentNode ? currentNode.label : 'No node selected'}
+              </div>
+              <div style={{ marginTop:14, fontSize:12, color:'rgba(255,255,255,0.5)', lineHeight:1.6 }}>
+                {currentNode && currentNode.kind === 'chance'
+                  ? 'Pick a board card above to continue.'
+                  : 'Hand ended. Click an earlier breadcrumb to revisit a decision, or reset.'}
+              </div>
+              <button onClick={resetTree} style={{
+                marginTop:18, padding:'7px 14px', borderRadius:5,
+                background:'rgba(255,255,255,0.06)', color:'#fff', border:'1px solid rgba(255,255,255,0.1)',
+                cursor:'pointer', fontFamily:'Inter, sans-serif', fontSize:12,
+              }}>Reset line</button>
+            </div>
+          )}
+        </main>
+
+        {/* RIGHT SIDEBAR */}
+        <aside style={{ borderLeft:'1px solid rgba(255,255,255,0.06)', padding:'18px 18px', display:'flex', flexDirection:'column', gap:22, background:'#08090d', overflow:'auto' }}>
+          {strategy ? (
+            <>
+              <DetailPanel hand={focused} strategy={strategy}/>
+              <div>
+                <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>RANGE STRATEGY</div>
+                <div style={{ padding:14, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11 }}>
+                  {(() => {
+                    // Calculate range-weighted action frequencies
+                    // Note: rangeWeights should already sum to 1.0 (normalized in export)
+                    const rangeStrategy = {};
+
+                    for (const action of strategy.actions) {
+                      rangeStrategy[action.id] = strategy.hands.reduce((sum, h) =>
+                        sum + (h.freq[action.id] || 0) * (h.rangeWeight || 0), 0
+                      );
+                    }
+
+                    const visibleActs = strategy.actions.filter(a => visibleActions[a.id]);
+                    const visTotal = visibleActs.reduce((sum, action) => {
+                      const val = rangeStrategy[action.id] || 0;
+                      return sum + val;
+                    }, 0) || 1;
+
+                    return (
+                      <>
+                        <div style={{ fontSize:10, color:'rgba(255,255,255,0.5)', marginBottom:10, lineHeight:1.4 }}>
+                          Aggregate strategy weighted by range composition
+                        </div>
+                        {visibleActs.map(action => {
+                          const freq = rangeStrategy[action.id] || 0;
+                          const pct = (freq / visTotal * 100);
+                          return (
+                            <div key={action.id} style={{ marginBottom:8 }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                                <span style={{ color:'rgba(255,255,255,0.6)', textTransform:'capitalize' }}>{action.label}</span>
+                                <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'#fff' }}>
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </div>
+                              <div style={{ height:6, borderRadius:3, background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
+                                <div style={{
+                                  height:'100%',
+                                  width: pct + '%',
+                                  background: action.color,
+                                  transition:'width 200ms'
+                                }}/>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontFamily:'"JetBrains Mono", monospace', color:'rgba(255,255,255,0.4)', letterSpacing:'0.12em', marginBottom:12 }}>RANGE STATS</div>
+                <div style={{ padding:14, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11, lineHeight:1.8 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Total hands</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'#fff' }}>{strategy.hands.length}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg equity</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color:'#fff' }}>
+                      {(strategy.hands.reduce((s,h)=>s+h.equity,0)/strategy.hands.length*100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV (uni)</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color: strategy.hands.reduce((s,h)=>s+h.evTotal,0) >= 0 ? '#86efac' : '#fca5a5' }}>
+                      {((strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length) >= 0 ? '+' : '')}
+                      {(strategy.hands.reduce((s,h)=>s+h.evTotal,0)/strategy.hands.length).toFixed(2)} BB
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'rgba(255,255,255,0.6)' }}>Avg EV (rng)</span>
+                    <span style={{ fontFamily:'"JetBrains Mono", monospace', color: strategy.hands.reduce((s,h)=>s+h.evRange,0) >= 0 ? '#86efac' : '#fca5a5' }}>
+                      {((strategy.hands.reduce((s,h)=>s+h.evRange,0)/strategy.hands.length) >= 0 ? '+' : '')}
+                      {(strategy.hands.reduce((s,h)=>s+h.evRange,0)/strategy.hands.length).toFixed(2)} BB
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, padding:18, color:'rgba(255,255,255,0.5)', fontSize:12, lineHeight:1.5 }}>
+              No active decision node. Reset the line to start over.
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+</body>
+</html>
+
