@@ -38,6 +38,44 @@ class GenerateTreeStructure : FunSpec({
         println("Training solver with 5M iterations (uniform sampling for clean equilibrium)...")
         val profile = trainSolver(iterations = 5_000_000, deepScenarioWeight = 0.0)
 
+        // Measure exploitability of trained solution
+        // IMPORTANT: Must match training setup (all boards, not just one)
+        println("\nMeasuring exploitability...")
+        val exploitCalc = com.nlhsolver.core.ExploitabilityCalculator(numPlayers = 2)
+
+        // Generate ALL matchups (same as trainSolver)
+        val rootStates = mutableListOf<LeducState>()
+        for (p1Card in 0..5) {
+            for (p2Card in 0..5) {
+                for (boardCard in 0..5) {
+                    if (p1Card != p2Card && p1Card != boardCard && p2Card != boardCard) {
+                        rootStates.add(
+                            LeducState(
+                                p1Card = p1Card,
+                                p2Card = p2Card,
+                                boardCard = boardCard,
+                                round = 1,
+                                p1Invested = 1.0,
+                                p2Invested = 1.0,
+                                history = ""
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        var totalExploit = 0.0
+        for (rootState in rootStates) {
+            totalExploit += exploitCalc.calculateExploitability(rootState, profile)
+        }
+        val avgExploit = totalExploit / rootStates.size
+        val exploitPct = (avgExploit / 3.0) * 100
+
+        println("  All boards: ${rootStates.size} matchups")
+        println("  Total exploitability: ${String.format("%.6f", avgExploit)} BB (${String.format("%.2f", exploitPct)}% of pot)")
+        println()
+
         // Generate tree for each board
         val trees = mutableListOf<String>()
         for (board in listOf("J", "Q", "K")) {

@@ -161,6 +161,18 @@ class LeducBlueprintValidationTest : FunSpec({
         println()
     }
 
+    test("Leduc blueprint - compare single board vs all boards training").config(enabled = false) {
+        println("\n=== Comparing Training Approaches ===\n")
+
+        // This test would compare:
+        // 1. Single fixed board (current approach): ~39% exploitability at 500k
+        // 2. All boards training: ~72% exploitability at 5M (from GenerateTreeStructure)
+        //
+        // Key finding: Training on a single fixed board converges much better!
+        // This suggests that the "all boards" approach in GenerateTreeStructure
+        // might be training 120 independent games rather than a unified game tree.
+    }
+
     test("Leduc blueprint - inspect sample strategies") {
         println("\n=== Leduc Strategy Inspection ===\n")
 
