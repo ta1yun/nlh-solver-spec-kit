@@ -264,16 +264,24 @@ class LeducUnifiedGameTreeTest : FunSpec({
         repeat(iterations) {
             solver3.train(fixedBoardStates.random(), iterations = 1)
         }
-        val exploit3 = measureExploitabilitySingleBoard(solver3, fixedBoard)
+        // IMPORTANT: Measure over ALL boards, not just the training board!
+        val exploit3Single = measureExploitabilitySingleBoard(solver3, fixedBoard)
+        val exploit3All = measureExploitabilityAllBoards(solver3)
         println("  Training states: ${fixedBoardStates.size}")
-        println("  Exploitability: ${String.format("%.2f", exploit3)}% of pot")
+        println("  Exploitability (board=K only): ${String.format("%.2f", exploit3Single)}% of pot")
+        println("  Exploitability (all boards):   ${String.format("%.2f", exploit3All)}% of pot")
         println()
 
         println("=== Analysis ===")
         println()
-        println("Approach 1 (pre-dealt):  ${String.format("%5.2f", exploit1)}% - Trains 120 separate games")
-        println("Approach 2 (chance):     ${String.format("%5.2f", exploit2)}% - Unified game tree")
-        println("Approach 3 (fixed):      ${String.format("%5.2f", exploit3)}% - Single board only")
+        println("Measuring over FULL distribution (all 120 board combinations):")
+        println("  Approach 1 (pre-dealt):  ${String.format("%5.2f", exploit1)}% - Trains 120 separate games")
+        println("  Approach 2 (chance):     ${String.format("%5.2f", exploit2)}% - Unified game tree")
+        println("  Approach 3 (fixed):      ${String.format("%5.2f", exploit3All)}% - Trained on board=K only")
+        println()
+        println("Note: Approach 3 trained on one board but generalized to others")
+        println("  On training board (K): ${String.format("%.2f", exploit3Single)}%")
+        println("  On all boards:         ${String.format("%.2f", exploit3All)}%")
         println()
 
         if (exploit2 < exploit1) {
