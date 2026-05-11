@@ -2,7 +2,7 @@ package com.nlhsolver.export
 
 import com.nlhsolver.core.CFRSolver
 import com.nlhsolver.core.StrategyProfile
-import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.integration.LeducState
 import io.kotest.core.spec.style.FunSpec
 import java.io.File
 
@@ -15,9 +15,9 @@ class GenerateAllScenarios : FunSpec({
     test("Generate complete Leduc scenario export") {
         println("\n=== Generating Complete Leduc Tree ===\n")
 
-        // Train solver once for all scenarios
-        println("Training solver...")
-        val profile = trainSolver()
+        // Train solver with deep scenario oversampling
+        println("Training solver with 2M iterations (30% deep scenario focus)...")
+        val profile = trainSolver(iterations = 2_000_000, deepScenarioWeight = 0.3)
 
         // Collect all unique strategic spots
         val spots = collectUniqueStrategicSpots()
@@ -54,35 +54,84 @@ data class StrategicSpot(
     val actions: List<String>
 )
 
-fun trainSolver(): StrategyProfile {
+fun trainSolver(iterations: Int = 100000, deepScenarioWeight: Double = 0.2): StrategyProfile {
     val allCards = 0..5
-    val allMatchups = mutableListOf<LeducWithSuitAbstraction>()
+    val allMatchups = mutableListOf<LeducState>()
+
+    // CORRECTED: Use chance nodes (boardCard = -1) for unified game tree
+    // This creates one game where Round 1 strategies generalize across all boards
+    for (p1 in allCards) {
+        for (p2 in allCards) {
+            if (p1 != p2) {
+                allMatchups.add(
+                    LeducState(
+                        p1Card = p1,
+                        p2Card = p2,
+                        boardCard = -1,  // CHANCE NODE - board dealt uniformly when R1 completes
+                        round = 1,
+                        p1Invested = 1.0,
+                        p2Invested = 1.0,
+                        history = ""
+                    )
+                )
+            }
+        }
+    }
+
+    // Deep scenarios to oversample - states that LEAD TO deep decision points
+    // Updated based on exploitability scan (FindExploitableNodes)
+    val deepScenarios = mutableListOf<LeducState>()
+    val deepHistories = listOf(
+        // Original deep spots
+        "xbc|x",   // P2 to act after P1 checks R2
+        "bc|x",    // P2 to act after P1 checks R2
+
+        // Top exploitable spots (10+ chip gaps)
+        "xbc|xbr", // 3-bet spots - K massively under-calling
+        "xbc|br",  // 3-bet spots - K massively under-calling
+
+        // High exploitability (5-10 chip gaps)
+        "xbc|b",   // Q under-raising as bluff
+        "bc|b",    // Q under-raising as bluff
+        "xbc|xb",  // Q under-raising as bluff
+        "bc|xb"    // Q/J under-raising
+    )
 
     for (p1 in allCards) {
         for (p2 in allCards) {
             for (board in allCards) {
                 if (p1 != p2 && p1 != board && p2 != board) {
-                    allMatchups.add(
-                        LeducWithSuitAbstraction(
-                            p1Card = p1,
-                            p2Card = p2,
-                            boardCard = board,
-                            round = 1,
-                            p1Invested = 1.0,
-                            p2Invested = 1.0,
-                            history = ""
+                    deepHistories.forEach { history ->
+                        deepScenarios.add(
+                            LeducState(
+                                p1Card = p1,
+                                p2Card = p2,
+                                boardCard = board,
+                                round = 2,
+                                p1Invested = 3.0,  // After xbc or bc
+                                p2Invested = 3.0,
+                                history = history
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
     }
 
     val solver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
-    repeat(2000000) { i ->
-        val matchup = allMatchups[i % allMatchups.size]
+    val reportInterval = if (iterations >= 1000000) 100000 else 25000
+
+    repeat(iterations) { i ->
+        // Sample from deep scenarios with probability deepScenarioWeight
+        val matchup = if (Math.random() < deepScenarioWeight) {
+            deepScenarios[i % deepScenarios.size]
+        } else {
+            allMatchups[i % allMatchups.size]
+        }
+
         solver.train(matchup, iterations = 1)
-        if ((i + 1) % 100000 == 0) println("  ${i + 1} iterations")
+        if ((i + 1) % reportInterval == 0) println("  ${i + 1} iterations")
     }
 
     return solver.getStrategyProfile()
@@ -97,7 +146,7 @@ fun collectUniqueStrategicSpots(): List<StrategicSpot> {
         val boardCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
 
         // Use one sample card combination to explore paths
-        val initialState = LeducWithSuitAbstraction(
+        val initialState = LeducState(
             p1Card = 1, // J♥
             p2Card = 3, // Q♥
             boardCard = boardCard,
@@ -114,7 +163,7 @@ fun collectUniqueStrategicSpots(): List<StrategicSpot> {
 }
 
 fun explorePaths(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     boardName: String,
     visited: MutableSet<String>,
     result: MutableList<StrategicSpot>
@@ -157,7 +206,7 @@ fun explorePaths(
 
     // Recursively explore all continuations
     for (action in actions) {
-        val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+        val nextState = state.applyAction(action) as LeducState
         explorePaths(nextState, boardName, visited, result)
     }
 }
