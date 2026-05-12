@@ -25,7 +25,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
 <!-- Load recursive Leduc tree -->
-<script src="leduc-tree.js?v=external-sampling-1"></script>
+<script src="leduc-tree.js?v=range-weighted-11"></script>
 
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
@@ -121,6 +121,7 @@ function buildLeducTree() {
           evRange: h.evRange ?? h.evUniform ?? h.evTotal ?? 0,  // range-based EV
           ev: h.ev || {},  // action EVs vs uniform range
           evA: h.evA || {},  // action EVs vs actual range
+          rangeWeight: h.rangeWeight ?? 1.0,  // range weight for range-weighted display
         };
       }
     }
@@ -277,12 +278,18 @@ function LeducCard({ hand, actions, visibleActions, selected, hovered, onHover, 
       <div style={{ position:'absolute', top:8, left:10, fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
       <div style={{ position:'absolute', top:26, left:11, fontFamily:'Inter, sans-serif', fontSize:14, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.suit}</div>
       <div style={{ position:'absolute', bottom:8, right:10, transform:'rotate(180deg)', fontFamily:'Inter, sans-serif', fontWeight:700, fontSize:18, color: isRed ? '#dc2626' : '#0a0a0a', lineHeight:1 }}>{hand.rank}</div>
-      <div style={{ position:'absolute', left:0, right:0, bottom:0, height:18, display:'flex' }}>
-        {barWidths.map(({ action, width }) => {
-          if (width <= 0.001) return null;
-          return <div key={action.id} style={{ width: (width*100)+'%', background:action.color, transition:'width 200ms' }}/>;
-        })}
-      </div>
+      {(() => {
+        const cardHeight = 128;
+        const barHeight = (hand.rangeWeight || 0) * cardHeight;
+        return (
+          <div style={{ position:'absolute', left:0, right:0, bottom:0, height:barHeight, display:'flex' }}>
+            {barWidths.map(({ action, width }) => {
+              if (width <= 0.001) return null;
+              return <div key={action.id} style={{ width: (width*100)+'%', background:action.color, opacity:0.85, transition:'width 200ms, height 200ms' }}/>;
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -843,19 +850,20 @@ function App() {
                 <div style={{ padding:14, background:'#0e1015', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6, fontSize:11 }}>
                   {(() => {
                     // Calculate range-weighted action frequencies
-                    const totalWeight = strategy.hands.reduce((sum, h) => sum + (h.rangeWeight || 0), 0);
+                    // Note: rangeWeights should already sum to 1.0 (normalized in export)
                     const rangeStrategy = {};
 
-                    if (totalWeight > 0) {
-                      for (const action of strategy.actions) {
-                        rangeStrategy[action.id] = strategy.hands.reduce((sum, h) =>
-                          sum + (h.freq[action.id] || 0) * (h.rangeWeight || 0), 0
-                        ) / totalWeight;
-                      }
+                    for (const action of strategy.actions) {
+                      rangeStrategy[action.id] = strategy.hands.reduce((sum, h) =>
+                        sum + (h.freq[action.id] || 0) * (h.rangeWeight || 0), 0
+                      );
                     }
 
                     const visibleActs = strategy.actions.filter(a => visibleActions[a.id]);
-                    const visTotal = visibleActs.reduce((s,a)=>rangeStrategy[a.id]||0,0)||1;
+                    const visTotal = visibleActs.reduce((sum, action) => {
+                      const val = rangeStrategy[action.id] || 0;
+                      return sum + val;
+                    }, 0) || 1;
 
                     return (
                       <>

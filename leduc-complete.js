@@ -604,9 +604,9 @@
     const strat = {
       Ka: { freq:{check:0.98, bet:0.02} },
       Kb: { freq:{check:0.98, bet:0.02} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
-      Jb: { freq:{check:0.07, bet:0.93} },
+      Qa: { freq:{check:0.98, bet:0.02} },
+      Qb: { freq:{check:0.98, bet:0.02} },
+      Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -634,8 +634,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.20, call:0.79, raise:0.01} },
-      Kb: { freq:{fold:0.20, call:0.79, raise:0.01} },
+      Ka: { freq:{fold:0.10, call:0.90, raise:0.00} },
+      Kb: { freq:{fold:0.10, call:0.90, raise:0.00} },
       Qa: { freq:{fold:0.99, call:0.00, raise:0.01} },
       Qb: { freq:{fold:0.99, call:0.00, raise:0.01} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
@@ -666,10 +666,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.95, call:0.05} },
-      Kb: { freq:{fold:0.95, call:0.05} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Ka: { freq:{fold:0.07, call:0.93} },
+      Kb: { freq:{fold:0.07, call:0.93} },
+      Qa: { freq:{fold:1.00, call:0.00} },
+      Qb: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -698,10 +698,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.58, bet:0.42} },
-      Kb: { freq:{check:0.58, bet:0.42} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
+      Ka: { freq:{check:0.99, bet:0.01} },
+      Kb: { freq:{check:0.99, bet:0.01} },
+      Qa: { freq:{check:0.98, bet:0.02} },
+      Qb: { freq:{check:0.98, bet:0.02} },
       Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
@@ -730,10 +730,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.01, call:0.99, raise:0.00} },
-      Kb: { freq:{fold:0.01, call:0.99, raise:0.00} },
-      Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
-      Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Ka: { freq:{fold:0.18, call:0.82, raise:0.00} },
+      Kb: { freq:{fold:0.18, call:0.82, raise:0.00} },
+      Qa: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Qb: { freq:{fold:0.99, call:0.00, raise:0.01} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
     };
     const hands = cards.map(c => {
@@ -762,10 +762,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.01, call:0.99} },
-      Kb: { freq:{fold:0.01, call:0.99} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Ka: { freq:{fold:0.99, call:0.01} },
+      Kb: { freq:{fold:0.99, call:0.01} },
+      Qa: { freq:{fold:1.00, call:0.00} },
+      Qb: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -794,11 +794,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.96, bet:0.04} },
-      Kb: { freq:{check:0.96, bet:0.04} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
-      Jb: { freq:{check:0.03, bet:0.97} },
+      Ka: { freq:{check:0.95, bet:0.05} },
+      Kb: { freq:{check:0.95, bet:0.05} },
+      Qa: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:1.00, bet:0.00} },
+      Jb: { freq:{check:0.01, bet:0.99} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -826,10 +826,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.07, call:0.93, raise:0.00} },
-      Kb: { freq:{fold:0.07, call:0.93, raise:0.00} },
-      Qa: { freq:{fold:0.99, call:0.00, raise:0.01} },
-      Qb: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Ka: { freq:{fold:0.05, call:0.94, raise:0.02} },
+      Kb: { freq:{fold:0.05, call:0.94, raise:0.02} },
+      Qa: { freq:{fold:0.95, call:0.00, raise:0.05} },
+      Qb: { freq:{fold:0.95, call:0.00, raise:0.05} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
     };
     const hands = cards.map(c => {
@@ -858,10 +858,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.47, call:0.53} },
-      Kb: { freq:{fold:0.47, call:0.53} },
-      Qa: { freq:{fold:1.00, call:0.00} },
-      Qb: { freq:{fold:1.00, call:0.00} },
+      Ka: { freq:{fold:0.36, call:0.64} },
+      Kb: { freq:{fold:0.36, call:0.64} },
+      Qa: { freq:{fold:0.99, call:0.01} },
+      Qb: { freq:{fold:0.99, call:0.01} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -892,8 +892,8 @@
     const strat = {
       Ka: { freq:{check:0.52, bet:0.48} },
       Kb: { freq:{check:0.52, bet:0.48} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
+      Qa: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:1.00, bet:0.00} },
       Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
@@ -922,8 +922,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.00, call:0.99, raise:0.00} },
-      Kb: { freq:{fold:0.00, call:0.99, raise:0.00} },
+      Ka: { freq:{fold:0.00, call:1.00, raise:0.00} },
+      Kb: { freq:{fold:0.00, call:1.00, raise:0.00} },
       Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
@@ -954,10 +954,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.00, call:1.00} },
-      Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Ka: { freq:{fold:0.04, call:0.96} },
+      Kb: { freq:{fold:0.04, call:0.96} },
+      Qa: { freq:{fold:0.98, call:0.02} },
+      Qb: { freq:{fold:0.98, call:0.02} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -986,11 +986,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.99, bet:0.01} },
-      Kb: { freq:{check:0.99, bet:0.01} },
-      Qa: { freq:{check:0.98, bet:0.02} },
-      Qb: { freq:{check:0.98, bet:0.02} },
-      Jb: { freq:{check:0.30, bet:0.70} },
+      Ka: { freq:{check:1.00, bet:0.00} },
+      Kb: { freq:{check:1.00, bet:0.00} },
+      Qa: { freq:{check:0.99, bet:0.01} },
+      Qb: { freq:{check:0.99, bet:0.01} },
+      Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1018,10 +1018,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.22, call:0.78, raise:0.00} },
-      Kb: { freq:{fold:0.22, call:0.78, raise:0.00} },
-      Qa: { freq:{fold:0.99, call:0.00, raise:0.01} },
-      Qb: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Ka: { freq:{fold:0.08, call:0.92, raise:0.00} },
+      Kb: { freq:{fold:0.08, call:0.92, raise:0.00} },
+      Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
     };
     const hands = cards.map(c => {
@@ -1050,8 +1050,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.94, call:0.06} },
-      Kb: { freq:{fold:0.94, call:0.06} },
+      Ka: { freq:{fold:0.01, call:0.99} },
+      Kb: { freq:{fold:0.01, call:0.99} },
       Qa: { freq:{fold:1.00, call:0.00} },
       Qb: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:0.00, call:1.00} },
@@ -1082,10 +1082,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.83, bet:0.17} },
-      Kb: { freq:{check:0.83, bet:0.17} },
-      Qa: { freq:{check:0.47, bet:0.53} },
-      Qb: { freq:{check:0.47, bet:0.53} },
+      Ka: { freq:{check:0.98, bet:0.02} },
+      Kb: { freq:{check:0.98, bet:0.02} },
+      Qa: { freq:{check:0.85, bet:0.15} },
+      Qb: { freq:{check:0.85, bet:0.15} },
       Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
@@ -1114,10 +1114,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.00, call:1.00, raise:0.00} },
-      Kb: { freq:{fold:0.00, call:1.00, raise:0.00} },
-      Qa: { freq:{fold:0.98, call:0.00, raise:0.01} },
-      Qb: { freq:{fold:0.98, call:0.00, raise:0.01} },
+      Ka: { freq:{fold:0.21, call:0.79, raise:0.00} },
+      Kb: { freq:{fold:0.21, call:0.79, raise:0.00} },
+      Qa: { freq:{fold:0.98, call:0.00, raise:0.02} },
+      Qb: { freq:{fold:0.98, call:0.00, raise:0.02} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
     };
     const hands = cards.map(c => {
@@ -1146,8 +1146,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.00, call:1.00} },
-      Kb: { freq:{fold:0.00, call:1.00} },
+      Ka: { freq:{fold:0.02, call:0.98} },
+      Kb: { freq:{fold:0.02, call:0.98} },
       Qa: { freq:{fold:0.99, call:0.01} },
       Qb: { freq:{fold:0.99, call:0.01} },
       Jb: { freq:{fold:0.00, call:1.00} },
@@ -1178,11 +1178,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.95, bet:0.05} },
-      Kb: { freq:{check:0.95, bet:0.05} },
-      Qa: { freq:{check:0.98, bet:0.02} },
-      Qb: { freq:{check:0.98, bet:0.02} },
-      Jb: { freq:{check:0.05, bet:0.95} },
+      Ka: { freq:{check:0.96, bet:0.04} },
+      Kb: { freq:{check:0.96, bet:0.04} },
+      Qa: { freq:{check:0.99, bet:0.01} },
+      Qb: { freq:{check:0.99, bet:0.01} },
+      Jb: { freq:{check:0.03, bet:0.97} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1210,10 +1210,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.15, call:0.83, raise:0.02} },
-      Kb: { freq:{fold:0.15, call:0.83, raise:0.02} },
-      Qa: { freq:{fold:0.97, call:0.00, raise:0.03} },
-      Qb: { freq:{fold:0.97, call:0.00, raise:0.03} },
+      Ka: { freq:{fold:0.04, call:0.94, raise:0.02} },
+      Kb: { freq:{fold:0.04, call:0.94, raise:0.02} },
+      Qa: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Qb: { freq:{fold:0.99, call:0.00, raise:0.01} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
     };
     const hands = cards.map(c => {
@@ -1242,10 +1242,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.63, call:0.37} },
-      Kb: { freq:{fold:0.63, call:0.37} },
-      Qa: { freq:{fold:0.96, call:0.04} },
-      Qb: { freq:{fold:0.96, call:0.04} },
+      Ka: { freq:{fold:0.16, call:0.84} },
+      Kb: { freq:{fold:0.16, call:0.84} },
+      Qa: { freq:{fold:1.00, call:0.00} },
+      Qb: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -1276,8 +1276,8 @@
     const strat = {
       Ka: { freq:{check:0.52, bet:0.48} },
       Kb: { freq:{check:0.52, bet:0.48} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
+      Qa: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:1.00, bet:0.00} },
       Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
@@ -1306,11 +1306,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.01, call:0.99, raise:0.00} },
-      Kb: { freq:{fold:0.01, call:0.99, raise:0.00} },
+      Ka: { freq:{fold:0.00, call:1.00, raise:0.00} },
+      Kb: { freq:{fold:0.00, call:1.00, raise:0.00} },
       Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
-      Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
+      Jb: { freq:{fold:0.00, call:0.00, raise:0.99} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1338,10 +1338,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.09, call:0.91} },
-      Kb: { freq:{fold:0.09, call:0.91} },
-      Qa: { freq:{fold:0.97, call:0.03} },
-      Qb: { freq:{fold:0.97, call:0.03} },
+      Ka: { freq:{fold:0.03, call:0.97} },
+      Kb: { freq:{fold:0.03, call:0.97} },
+      Qa: { freq:{fold:0.99, call:0.01} },
+      Qb: { freq:{fold:0.99, call:0.01} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -1374,7 +1374,7 @@
       Kb: { freq:{check:1.00, bet:0.00} },
       Qa: { freq:{check:1.00, bet:0.00} },
       Qb: { freq:{check:1.00, bet:0.00} },
-      Jb: { freq:{check:0.99, bet:0.01} },
+      Jb: { freq:{check:1.00, bet:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1402,8 +1402,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.86, call:0.13, raise:0.01} },
-      Kb: { freq:{fold:0.86, call:0.13, raise:0.01} },
+      Ka: { freq:{fold:0.98, call:0.01, raise:0.00} },
+      Kb: { freq:{fold:0.98, call:0.01, raise:0.00} },
       Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
@@ -1434,10 +1434,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.84, call:0.16} },
-      Kb: { freq:{fold:0.84, call:0.16} },
-      Qa: { freq:{fold:1.00, call:0.00} },
-      Qb: { freq:{fold:1.00, call:0.00} },
+      Ka: { freq:{fold:0.95, call:0.05} },
+      Kb: { freq:{fold:0.95, call:0.05} },
+      Qa: { freq:{fold:0.99, call:0.01} },
+      Qb: { freq:{fold:0.99, call:0.01} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -1466,10 +1466,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.99, bet:0.01} },
-      Kb: { freq:{check:0.99, bet:0.01} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
+      Ka: { freq:{check:1.00, bet:0.00} },
+      Kb: { freq:{check:1.00, bet:0.00} },
+      Qa: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:1.00, bet:0.00} },
       Jb: { freq:{check:0.00, bet:1.00} },
     };
     const hands = cards.map(c => {
@@ -1498,8 +1498,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:1.00, call:0.00, raise:0.00} },
-      Kb: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Ka: { freq:{fold:0.99, call:0.00, raise:0.00} },
+      Kb: { freq:{fold:0.99, call:0.00, raise:0.00} },
       Qa: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Qb: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Jb: { freq:{fold:0.00, call:0.00, raise:1.00} },
@@ -1530,10 +1530,10 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.25, call:0.75} },
-      Kb: { freq:{fold:0.25, call:0.75} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Ka: { freq:{fold:0.99, call:0.01} },
+      Kb: { freq:{fold:0.99, call:0.01} },
+      Qa: { freq:{fold:1.00, call:0.00} },
+      Qb: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:0.00, call:1.00} },
     };
     const hands = cards.map(c => {
@@ -1562,11 +1562,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{check:0.13, bet:0.87} },
-      Qa: { freq:{check:0.48, bet:0.52} },
-      Qb: { freq:{check:0.48, bet:0.52} },
-      Ja: { freq:{check:0.02, bet:0.98} },
-      Jb: { freq:{check:0.02, bet:0.98} },
+      Kb: { freq:{check:0.01, bet:0.99} },
+      Qa: { freq:{check:0.77, bet:0.23} },
+      Qb: { freq:{check:0.77, bet:0.23} },
+      Ja: { freq:{check:0.01, bet:0.99} },
+      Jb: { freq:{check:0.01, bet:0.99} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1595,10 +1595,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.70, call:0.29, raise:0.01} },
-      Qb: { freq:{fold:0.70, call:0.29, raise:0.01} },
-      Ja: { freq:{fold:0.67, call:0.00, raise:0.33} },
-      Jb: { freq:{fold:0.67, call:0.00, raise:0.33} },
+      Qa: { freq:{fold:0.55, call:0.44, raise:0.00} },
+      Qb: { freq:{fold:0.55, call:0.44, raise:0.00} },
+      Ja: { freq:{fold:0.97, call:0.00, raise:0.03} },
+      Jb: { freq:{fold:0.97, call:0.00, raise:0.03} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1627,10 +1627,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.77, call:0.23} },
-      Qb: { freq:{fold:0.77, call:0.23} },
-      Ja: { freq:{fold:0.99, call:0.01} },
-      Jb: { freq:{fold:0.99, call:0.01} },
+      Qa: { freq:{fold:0.45, call:0.55} },
+      Qb: { freq:{fold:0.45, call:0.55} },
+      Ja: { freq:{fold:1.00, call:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1659,10 +1659,10 @@
 
     const strat = {
       Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.63, bet:0.37} },
-      Qb: { freq:{check:0.63, bet:0.37} },
-      Ja: { freq:{check:0.64, bet:0.36} },
-      Jb: { freq:{check:0.64, bet:0.36} },
+      Qa: { freq:{check:0.88, bet:0.12} },
+      Qb: { freq:{check:0.88, bet:0.12} },
+      Ja: { freq:{check:0.93, bet:0.07} },
+      Jb: { freq:{check:0.93, bet:0.07} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1691,10 +1691,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.46, call:0.52, raise:0.02} },
-      Qb: { freq:{fold:0.46, call:0.52, raise:0.02} },
-      Ja: { freq:{fold:0.20, call:0.01, raise:0.79} },
-      Jb: { freq:{fold:0.20, call:0.01, raise:0.79} },
+      Qa: { freq:{fold:0.31, call:0.69, raise:0.00} },
+      Qb: { freq:{fold:0.31, call:0.69, raise:0.00} },
+      Ja: { freq:{fold:0.96, call:0.00, raise:0.03} },
+      Jb: { freq:{fold:0.96, call:0.00, raise:0.03} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1723,8 +1723,8 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Qa: { freq:{fold:0.85, call:0.15} },
+      Qb: { freq:{fold:0.85, call:0.15} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
     };
@@ -1754,11 +1754,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{check:0.44, bet:0.56} },
-      Qa: { freq:{check:0.85, bet:0.15} },
-      Qb: { freq:{check:0.85, bet:0.15} },
-      Ja: { freq:{check:0.47, bet:0.53} },
-      Jb: { freq:{check:0.47, bet:0.53} },
+      Kb: { freq:{check:0.75, bet:0.25} },
+      Qa: { freq:{check:0.97, bet:0.03} },
+      Qb: { freq:{check:0.97, bet:0.03} },
+      Ja: { freq:{check:0.62, bet:0.38} },
+      Jb: { freq:{check:0.62, bet:0.38} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1787,10 +1787,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.48, call:0.51, raise:0.01} },
-      Qb: { freq:{fold:0.48, call:0.51, raise:0.01} },
-      Ja: { freq:{fold:0.73, call:0.00, raise:0.27} },
-      Jb: { freq:{fold:0.73, call:0.00, raise:0.27} },
+      Qa: { freq:{fold:0.43, call:0.56, raise:0.01} },
+      Qb: { freq:{fold:0.43, call:0.56, raise:0.01} },
+      Ja: { freq:{fold:0.80, call:0.00, raise:0.20} },
+      Jb: { freq:{fold:0.80, call:0.00, raise:0.20} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1807,6 +1807,102 @@
 
   function makeScenario_r2_k_brc_br() {
     // bet raise call | bet raise
+    const actions = [ACT.fold, ACT.call];
+    const cards = [
+      {id:'Ka', rank:'K', suit:'♠'},
+      {id:'Kb', rank:'K', suit:'♥'},
+      {id:'Qa', rank:'Q', suit:'♠'},
+      {id:'Qb', rank:'Q', suit:'♥'},
+      {id:'Ja', rank:'J', suit:'♠'},
+      {id:'Jb', rank:'J', suit:'♥'},
+    ];
+
+    const strat = {
+      Kb: { freq:{fold:0.00, call:1.00} },
+      Qa: { freq:{fold:0.46, call:0.54} },
+      Qb: { freq:{fold:0.46, call:0.54} },
+      Ja: { freq:{fold:0.99, call:0.01} },
+      Jb: { freq:{fold:0.99, call:0.01} },
+    };
+    const hands = cards.map(c => {
+      const s = strat[c.id];
+      if (!s) return null;
+      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
+    }).filter(h => h !== null);
+
+    return {
+      game:'leduc', handShape:'tile',
+      meta:{ street:'round2', pot:22, toCall:4, board:['K♠'] },
+      actions, hands
+    };
+  }
+
+  function makeScenario_r2_k_brc_x() {
+    // bet raise call | call hecall k
+    const actions = [ACT.check, ACT.bet];
+    const cards = [
+      {id:'Ka', rank:'K', suit:'♠'},
+      {id:'Kb', rank:'K', suit:'♥'},
+      {id:'Qa', rank:'Q', suit:'♠'},
+      {id:'Qb', rank:'Q', suit:'♥'},
+      {id:'Ja', rank:'J', suit:'♠'},
+      {id:'Jb', rank:'J', suit:'♥'},
+    ];
+
+    const strat = {
+      Kb: { freq:{check:0.00, bet:1.00} },
+      Qa: { freq:{check:0.92, bet:0.08} },
+      Qb: { freq:{check:0.92, bet:0.08} },
+      Ja: { freq:{check:0.00, bet:1.00} },
+      Jb: { freq:{check:0.00, bet:1.00} },
+    };
+    const hands = cards.map(c => {
+      const s = strat[c.id];
+      if (!s) return null;
+      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
+    }).filter(h => h !== null);
+
+    return {
+      game:'leduc', handShape:'tile',
+      meta:{ street:'round2', pot:10, toCall:0, board:['K♠'] },
+      actions, hands
+    };
+  }
+
+  function makeScenario_r2_k_brc_xb() {
+    // bet raise call | call hecall k bet
+    const actions = [ACT.fold, ACT.call, ACT.raise];
+    const cards = [
+      {id:'Ka', rank:'K', suit:'♠'},
+      {id:'Kb', rank:'K', suit:'♥'},
+      {id:'Qa', rank:'Q', suit:'♠'},
+      {id:'Qb', rank:'Q', suit:'♥'},
+      {id:'Ja', rank:'J', suit:'♠'},
+      {id:'Jb', rank:'J', suit:'♥'},
+    ];
+
+    const strat = {
+      Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
+      Qa: { freq:{fold:0.74, call:0.26, raise:0.00} },
+      Qb: { freq:{fold:0.74, call:0.26, raise:0.00} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
+    };
+    const hands = cards.map(c => {
+      const s = strat[c.id];
+      if (!s) return null;
+      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
+    }).filter(h => h !== null);
+
+    return {
+      game:'leduc', handShape:'tile',
+      meta:{ street:'round2', pot:14, toCall:4, board:['K♠'] },
+      actions, hands
+    };
+  }
+
+  function makeScenario_r2_k_brc_xbr() {
+    // bet raise call | call hecall k bet raise
     const actions = [ACT.fold, ACT.call];
     const cards = [
       {id:'Ka', rank:'K', suit:'♠'},
@@ -1837,102 +1933,6 @@
     };
   }
 
-  function makeScenario_r2_k_brc_x() {
-    // bet raise call | call hecall k
-    const actions = [ACT.check, ACT.bet];
-    const cards = [
-      {id:'Ka', rank:'K', suit:'♠'},
-      {id:'Kb', rank:'K', suit:'♥'},
-      {id:'Qa', rank:'Q', suit:'♠'},
-      {id:'Qb', rank:'Q', suit:'♥'},
-      {id:'Ja', rank:'J', suit:'♠'},
-      {id:'Jb', rank:'J', suit:'♥'},
-    ];
-
-    const strat = {
-      Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.57, bet:0.43} },
-      Qb: { freq:{check:0.57, bet:0.43} },
-      Ja: { freq:{check:0.01, bet:0.99} },
-      Jb: { freq:{check:0.01, bet:0.99} },
-    };
-    const hands = cards.map(c => {
-      const s = strat[c.id];
-      if (!s) return null;
-      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
-    }).filter(h => h !== null);
-
-    return {
-      game:'leduc', handShape:'tile',
-      meta:{ street:'round2', pot:10, toCall:0, board:['K♠'] },
-      actions, hands
-    };
-  }
-
-  function makeScenario_r2_k_brc_xb() {
-    // bet raise call | call hecall k bet
-    const actions = [ACT.fold, ACT.call, ACT.raise];
-    const cards = [
-      {id:'Ka', rank:'K', suit:'♠'},
-      {id:'Kb', rank:'K', suit:'♥'},
-      {id:'Qa', rank:'Q', suit:'♠'},
-      {id:'Qb', rank:'Q', suit:'♥'},
-      {id:'Ja', rank:'J', suit:'♠'},
-      {id:'Jb', rank:'J', suit:'♥'},
-    ];
-
-    const strat = {
-      Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.72, call:0.27, raise:0.01} },
-      Qb: { freq:{fold:0.72, call:0.27, raise:0.01} },
-      Ja: { freq:{fold:0.25, call:0.00, raise:0.75} },
-      Jb: { freq:{fold:0.25, call:0.00, raise:0.75} },
-    };
-    const hands = cards.map(c => {
-      const s = strat[c.id];
-      if (!s) return null;
-      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
-    }).filter(h => h !== null);
-
-    return {
-      game:'leduc', handShape:'tile',
-      meta:{ street:'round2', pot:14, toCall:4, board:['K♠'] },
-      actions, hands
-    };
-  }
-
-  function makeScenario_r2_k_brc_xbr() {
-    // bet raise call | call hecall k bet raise
-    const actions = [ACT.fold, ACT.call];
-    const cards = [
-      {id:'Ka', rank:'K', suit:'♠'},
-      {id:'Kb', rank:'K', suit:'♥'},
-      {id:'Qa', rank:'Q', suit:'♠'},
-      {id:'Qb', rank:'Q', suit:'♥'},
-      {id:'Ja', rank:'J', suit:'♠'},
-      {id:'Jb', rank:'J', suit:'♥'},
-    ];
-
-    const strat = {
-      Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.93, call:0.07} },
-      Qb: { freq:{fold:0.93, call:0.07} },
-      Ja: { freq:{fold:0.99, call:0.01} },
-      Jb: { freq:{fold:0.99, call:0.01} },
-    };
-    const hands = cards.map(c => {
-      const s = strat[c.id];
-      if (!s) return null;
-      return { id:c.id, label:c.rank+c.suit, rank:c.rank, suit:c.suit, combos:1, ...s };
-    }).filter(h => h !== null);
-
-    return {
-      game:'leduc', handShape:'tile',
-      meta:{ street:'round2', pot:22, toCall:4, board:['K♠'] },
-      actions, hands
-    };
-  }
-
   function makeScenario_r2_k_xbc_() {
     // call hecall k bet call |
     const actions = [ACT.check, ACT.bet];
@@ -1946,11 +1946,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{check:0.85, bet:0.15} },
-      Qa: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.99, bet:0.01} },
-      Ja: { freq:{check:0.95, bet:0.05} },
-      Jb: { freq:{check:0.95, bet:0.05} },
+      Kb: { freq:{check:0.00, bet:1.00} },
+      Qa: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:1.00, bet:0.00} },
+      Ja: { freq:{check:1.00, bet:0.00} },
+      Jb: { freq:{check:1.00, bet:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -1979,10 +1979,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.53, call:0.46, raise:0.01} },
-      Qb: { freq:{fold:0.53, call:0.46, raise:0.01} },
-      Ja: { freq:{fold:0.98, call:0.00, raise:0.01} },
-      Jb: { freq:{fold:0.98, call:0.00, raise:0.01} },
+      Qa: { freq:{fold:0.04, call:0.95, raise:0.01} },
+      Qb: { freq:{fold:0.04, call:0.95, raise:0.01} },
+      Ja: { freq:{fold:0.95, call:0.00, raise:0.04} },
+      Jb: { freq:{fold:0.95, call:0.00, raise:0.04} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2011,8 +2011,8 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.99, call:0.01} },
-      Qb: { freq:{fold:0.99, call:0.01} },
+      Qa: { freq:{fold:0.17, call:0.83} },
+      Qb: { freq:{fold:0.17, call:0.83} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
     };
@@ -2043,10 +2043,10 @@
 
     const strat = {
       Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.71, bet:0.29} },
-      Qb: { freq:{check:0.71, bet:0.29} },
-      Ja: { freq:{check:0.48, bet:0.52} },
-      Jb: { freq:{check:0.48, bet:0.52} },
+      Qa: { freq:{check:0.96, bet:0.04} },
+      Qb: { freq:{check:0.96, bet:0.04} },
+      Ja: { freq:{check:0.25, bet:0.75} },
+      Jb: { freq:{check:0.25, bet:0.75} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2075,10 +2075,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.43, call:0.56, raise:0.00} },
-      Qb: { freq:{fold:0.43, call:0.56, raise:0.00} },
-      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
-      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Qa: { freq:{fold:0.41, call:0.59, raise:0.00} },
+      Qb: { freq:{fold:0.41, call:0.59, raise:0.00} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2107,8 +2107,8 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.98, call:0.02} },
-      Qb: { freq:{fold:0.98, call:0.02} },
+      Qa: { freq:{fold:0.02, call:0.98} },
+      Qb: { freq:{fold:0.02, call:0.98} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
     };
@@ -2139,10 +2139,10 @@
 
     const strat = {
       Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.05, bet:0.95} },
-      Qb: { freq:{check:0.05, bet:0.95} },
-      Ja: { freq:{check:0.01, bet:0.99} },
-      Jb: { freq:{check:0.01, bet:0.99} },
+      Qa: { freq:{check:0.14, bet:0.86} },
+      Qb: { freq:{check:0.14, bet:0.86} },
+      Ja: { freq:{check:0.04, bet:0.96} },
+      Jb: { freq:{check:0.04, bet:0.96} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2171,10 +2171,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.70, call:0.29, raise:0.01} },
-      Qb: { freq:{fold:0.70, call:0.29, raise:0.01} },
-      Ja: { freq:{fold:0.83, call:0.00, raise:0.17} },
-      Jb: { freq:{fold:0.83, call:0.00, raise:0.17} },
+      Qa: { freq:{fold:0.44, call:0.55, raise:0.01} },
+      Qb: { freq:{fold:0.44, call:0.55, raise:0.01} },
+      Ja: { freq:{fold:0.94, call:0.00, raise:0.06} },
+      Jb: { freq:{fold:0.94, call:0.00, raise:0.06} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2205,8 +2205,8 @@
       Kb: { freq:{fold:0.00, call:1.00} },
       Qa: { freq:{fold:0.99, call:0.01} },
       Qb: { freq:{fold:0.99, call:0.01} },
-      Ja: { freq:{fold:0.99, call:0.01} },
-      Jb: { freq:{fold:0.99, call:0.01} },
+      Ja: { freq:{fold:1.00, call:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2235,10 +2235,10 @@
 
     const strat = {
       Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.95, bet:0.05} },
-      Qb: { freq:{check:0.95, bet:0.05} },
-      Ja: { freq:{check:0.56, bet:0.44} },
-      Jb: { freq:{check:0.56, bet:0.44} },
+      Qa: { freq:{check:0.91, bet:0.09} },
+      Qb: { freq:{check:0.91, bet:0.09} },
+      Ja: { freq:{check:0.05, bet:0.95} },
+      Jb: { freq:{check:0.05, bet:0.95} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2266,11 +2266,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{fold:0.00, call:0.01, raise:0.99} },
-      Qa: { freq:{fold:0.26, call:0.69, raise:0.05} },
-      Qb: { freq:{fold:0.26, call:0.69, raise:0.05} },
-      Ja: { freq:{fold:0.78, call:0.02, raise:0.20} },
-      Jb: { freq:{fold:0.78, call:0.02, raise:0.20} },
+      Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
+      Qa: { freq:{fold:0.62, call:0.37, raise:0.02} },
+      Qb: { freq:{fold:0.62, call:0.37, raise:0.02} },
+      Ja: { freq:{fold:0.98, call:0.00, raise:0.02} },
+      Jb: { freq:{fold:0.98, call:0.00, raise:0.02} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2299,8 +2299,8 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.74, call:0.26} },
-      Qb: { freq:{fold:0.74, call:0.26} },
+      Qa: { freq:{fold:0.98, call:0.02} },
+      Qb: { freq:{fold:0.98, call:0.02} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
     };
@@ -2330,11 +2330,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{check:0.01, bet:0.99} },
-      Qa: { freq:{check:0.63, bet:0.37} },
-      Qb: { freq:{check:0.63, bet:0.37} },
-      Ja: { freq:{check:0.93, bet:0.07} },
-      Jb: { freq:{check:0.93, bet:0.07} },
+      Kb: { freq:{check:0.04, bet:0.96} },
+      Qa: { freq:{check:0.67, bet:0.33} },
+      Qb: { freq:{check:0.67, bet:0.33} },
+      Ja: { freq:{check:0.90, bet:0.10} },
+      Jb: { freq:{check:0.90, bet:0.10} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2363,10 +2363,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Qa: { freq:{fold:0.30, call:0.69, raise:0.01} },
-      Qb: { freq:{fold:0.30, call:0.69, raise:0.01} },
-      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
-      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Qa: { freq:{fold:0.42, call:0.57, raise:0.00} },
+      Qb: { freq:{fold:0.42, call:0.57, raise:0.00} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2395,10 +2395,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.00, call:1.00} },
-      Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:0.88, call:0.12} },
-      Jb: { freq:{fold:0.88, call:0.12} },
+      Qa: { freq:{fold:0.57, call:0.43} },
+      Qb: { freq:{fold:0.57, call:0.43} },
+      Ja: { freq:{fold:1.00, call:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2427,8 +2427,8 @@
 
     const strat = {
       Kb: { freq:{check:0.00, bet:1.00} },
-      Qa: { freq:{check:0.66, bet:0.34} },
-      Qb: { freq:{check:0.66, bet:0.34} },
+      Qa: { freq:{check:0.81, bet:0.19} },
+      Qb: { freq:{check:0.81, bet:0.19} },
       Ja: { freq:{check:0.99, bet:0.01} },
       Jb: { freq:{check:0.99, bet:0.01} },
     };
@@ -2458,11 +2458,11 @@
     ];
 
     const strat = {
-      Kb: { freq:{fold:0.00, call:0.01, raise:0.99} },
-      Qa: { freq:{fold:0.00, call:1.00, raise:0.00} },
-      Qb: { freq:{fold:0.00, call:1.00, raise:0.00} },
-      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
-      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Kb: { freq:{fold:0.00, call:0.00, raise:1.00} },
+      Qa: { freq:{fold:0.30, call:0.66, raise:0.04} },
+      Qb: { freq:{fold:0.30, call:0.66, raise:0.04} },
+      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2491,10 +2491,10 @@
 
     const strat = {
       Kb: { freq:{fold:0.00, call:1.00} },
-      Qa: { freq:{fold:0.00, call:1.00} },
-      Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:0.97, call:0.03} },
-      Jb: { freq:{fold:0.97, call:0.03} },
+      Qa: { freq:{fold:0.38, call:0.62} },
+      Qb: { freq:{fold:0.38, call:0.62} },
+      Ja: { freq:{fold:0.99, call:0.01} },
+      Jb: { freq:{fold:0.99, call:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2524,9 +2524,9 @@
     const strat = {
       Ka: { freq:{check:0.98, bet:0.02} },
       Kb: { freq:{check:0.98, bet:0.02} },
-      Qb: { freq:{check:0.44, bet:0.56} },
-      Ja: { freq:{check:0.06, bet:0.94} },
-      Jb: { freq:{check:0.06, bet:0.94} },
+      Qb: { freq:{check:0.10, bet:0.90} },
+      Ja: { freq:{check:0.42, bet:0.58} },
+      Jb: { freq:{check:0.42, bet:0.58} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2554,8 +2554,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.68, call:0.31, raise:0.01} },
-      Kb: { freq:{fold:0.68, call:0.31, raise:0.01} },
+      Ka: { freq:{fold:0.48, call:0.52, raise:0.00} },
+      Kb: { freq:{fold:0.48, call:0.52, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
       Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
       Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
@@ -2586,8 +2586,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.97, call:0.03} },
-      Kb: { freq:{fold:0.97, call:0.03} },
+      Ka: { freq:{fold:0.61, call:0.39} },
+      Kb: { freq:{fold:0.61, call:0.39} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
@@ -2618,11 +2618,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.96, bet:0.04} },
-      Kb: { freq:{check:0.96, bet:0.04} },
+      Ka: { freq:{check:0.71, bet:0.29} },
+      Kb: { freq:{check:0.71, bet:0.29} },
       Qb: { freq:{check:0.00, bet:1.00} },
-      Ja: { freq:{check:0.05, bet:0.95} },
-      Jb: { freq:{check:0.05, bet:0.95} },
+      Ja: { freq:{check:0.82, bet:0.18} },
+      Jb: { freq:{check:0.82, bet:0.18} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2650,11 +2650,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.49, call:0.50, raise:0.00} },
-      Kb: { freq:{fold:0.49, call:0.50, raise:0.00} },
+      Ka: { freq:{fold:0.40, call:0.59, raise:0.00} },
+      Kb: { freq:{fold:0.40, call:0.59, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.96, call:0.00, raise:0.04} },
-      Jb: { freq:{fold:0.96, call:0.00, raise:0.04} },
+      Ja: { freq:{fold:0.97, call:0.00, raise:0.03} },
+      Jb: { freq:{fold:0.97, call:0.00, raise:0.03} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2682,8 +2682,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.99, call:0.01} },
-      Kb: { freq:{fold:0.99, call:0.01} },
+      Ka: { freq:{fold:0.95, call:0.05} },
+      Kb: { freq:{fold:0.95, call:0.05} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
@@ -2714,11 +2714,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.34, bet:0.66} },
-      Kb: { freq:{check:0.34, bet:0.66} },
-      Qb: { freq:{check:0.01, bet:0.99} },
-      Ja: { freq:{check:0.88, bet:0.12} },
-      Jb: { freq:{check:0.88, bet:0.12} },
+      Ka: { freq:{check:0.68, bet:0.32} },
+      Kb: { freq:{check:0.68, bet:0.32} },
+      Qb: { freq:{check:0.00, bet:1.00} },
+      Ja: { freq:{check:0.99, bet:0.01} },
+      Jb: { freq:{check:0.99, bet:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2746,11 +2746,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.38, call:0.51, raise:0.12} },
-      Kb: { freq:{fold:0.38, call:0.51, raise:0.12} },
+      Ka: { freq:{fold:0.15, call:0.79, raise:0.06} },
+      Kb: { freq:{fold:0.15, call:0.79, raise:0.06} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.65, call:0.00, raise:0.35} },
-      Jb: { freq:{fold:0.65, call:0.00, raise:0.35} },
+      Ja: { freq:{fold:0.95, call:0.00, raise:0.05} },
+      Jb: { freq:{fold:0.95, call:0.00, raise:0.05} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2778,8 +2778,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.60, call:0.40} },
-      Kb: { freq:{fold:0.60, call:0.40} },
+      Ka: { freq:{fold:0.63, call:0.37} },
+      Kb: { freq:{fold:0.63, call:0.37} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
@@ -2810,11 +2810,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.49, bet:0.51} },
-      Kb: { freq:{check:0.49, bet:0.51} },
+      Ka: { freq:{check:0.54, bet:0.46} },
+      Kb: { freq:{check:0.54, bet:0.46} },
       Qb: { freq:{check:0.00, bet:1.00} },
-      Ja: { freq:{check:0.99, bet:0.01} },
-      Jb: { freq:{check:0.99, bet:0.01} },
+      Ja: { freq:{check:1.00, bet:0.00} },
+      Jb: { freq:{check:1.00, bet:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2842,11 +2842,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.03, call:0.96, raise:0.01} },
-      Kb: { freq:{fold:0.03, call:0.96, raise:0.01} },
+      Ka: { freq:{fold:0.00, call:1.00, raise:0.00} },
+      Kb: { freq:{fold:0.00, call:1.00, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
-      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2874,11 +2874,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.45, call:0.55} },
-      Kb: { freq:{fold:0.45, call:0.55} },
+      Ka: { freq:{fold:0.11, call:0.89} },
+      Kb: { freq:{fold:0.11, call:0.89} },
       Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:0.92, call:0.08} },
-      Jb: { freq:{fold:0.92, call:0.08} },
+      Ja: { freq:{fold:0.99, call:0.01} },
+      Jb: { freq:{fold:0.99, call:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2906,11 +2906,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.07, bet:0.93} },
-      Kb: { freq:{check:0.07, bet:0.93} },
-      Qb: { freq:{check:0.01, bet:0.99} },
-      Ja: { freq:{check:0.04, bet:0.96} },
-      Jb: { freq:{check:0.04, bet:0.96} },
+      Ka: { freq:{check:1.00, bet:0.00} },
+      Kb: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:0.00, bet:1.00} },
+      Ja: { freq:{check:0.93, bet:0.07} },
+      Jb: { freq:{check:0.93, bet:0.07} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2938,11 +2938,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.58, call:0.41, raise:0.01} },
-      Kb: { freq:{fold:0.58, call:0.41, raise:0.01} },
+      Ka: { freq:{fold:0.24, call:0.76, raise:0.00} },
+      Kb: { freq:{fold:0.24, call:0.76, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.89, call:0.00, raise:0.11} },
-      Jb: { freq:{fold:0.89, call:0.00, raise:0.11} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -2970,8 +2970,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:1.00, call:0.00} },
-      Kb: { freq:{fold:1.00, call:0.00} },
+      Ka: { freq:{fold:0.01, call:0.99} },
+      Kb: { freq:{fold:0.01, call:0.99} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
@@ -3002,11 +3002,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.75, bet:0.25} },
-      Kb: { freq:{check:0.75, bet:0.25} },
+      Ka: { freq:{check:0.99, bet:0.01} },
+      Kb: { freq:{check:0.99, bet:0.01} },
       Qb: { freq:{check:0.00, bet:1.00} },
-      Ja: { freq:{check:0.55, bet:0.45} },
-      Jb: { freq:{check:0.55, bet:0.45} },
+      Ja: { freq:{check:0.30, bet:0.70} },
+      Jb: { freq:{check:0.30, bet:0.70} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3034,11 +3034,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.44, call:0.56, raise:0.01} },
-      Kb: { freq:{fold:0.44, call:0.56, raise:0.01} },
+      Ka: { freq:{fold:0.35, call:0.65, raise:0.00} },
+      Kb: { freq:{fold:0.35, call:0.65, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.88, call:0.00, raise:0.12} },
-      Jb: { freq:{fold:0.88, call:0.00, raise:0.12} },
+      Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3066,11 +3066,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.97, call:0.03} },
-      Kb: { freq:{fold:0.97, call:0.03} },
+      Ka: { freq:{fold:0.04, call:0.96} },
+      Kb: { freq:{fold:0.04, call:0.96} },
       Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:0.96, call:0.04} },
-      Jb: { freq:{fold:0.96, call:0.04} },
+      Ja: { freq:{fold:1.00, call:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3098,11 +3098,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.99, bet:0.01} },
-      Kb: { freq:{check:0.99, bet:0.01} },
-      Qb: { freq:{check:0.93, bet:0.07} },
-      Ja: { freq:{check:0.98, bet:0.02} },
-      Jb: { freq:{check:0.98, bet:0.02} },
+      Ka: { freq:{check:1.00, bet:0.00} },
+      Kb: { freq:{check:1.00, bet:0.00} },
+      Qb: { freq:{check:0.92, bet:0.08} },
+      Ja: { freq:{check:1.00, bet:0.00} },
+      Jb: { freq:{check:1.00, bet:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3130,11 +3130,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.37, call:0.62, raise:0.01} },
-      Kb: { freq:{fold:0.37, call:0.62, raise:0.01} },
+      Ka: { freq:{fold:0.15, call:0.77, raise:0.08} },
+      Kb: { freq:{fold:0.15, call:0.77, raise:0.08} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.75, call:0.00, raise:0.25} },
-      Jb: { freq:{fold:0.75, call:0.00, raise:0.25} },
+      Ja: { freq:{fold:0.67, call:0.00, raise:0.33} },
+      Jb: { freq:{fold:0.67, call:0.00, raise:0.33} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3162,11 +3162,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.48, call:0.52} },
-      Kb: { freq:{fold:0.48, call:0.52} },
+      Ka: { freq:{fold:0.22, call:0.78} },
+      Kb: { freq:{fold:0.22, call:0.78} },
       Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:0.94, call:0.06} },
-      Jb: { freq:{fold:0.94, call:0.06} },
+      Ja: { freq:{fold:1.00, call:0.00} },
+      Jb: { freq:{fold:1.00, call:0.00} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3194,11 +3194,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.44, bet:0.56} },
-      Kb: { freq:{check:0.44, bet:0.56} },
+      Ka: { freq:{check:0.31, bet:0.69} },
+      Kb: { freq:{check:0.31, bet:0.69} },
       Qb: { freq:{check:0.00, bet:1.00} },
-      Ja: { freq:{check:0.92, bet:0.08} },
-      Jb: { freq:{check:0.92, bet:0.08} },
+      Ja: { freq:{check:0.98, bet:0.02} },
+      Jb: { freq:{check:0.98, bet:0.02} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3226,11 +3226,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.31, call:0.67, raise:0.02} },
-      Kb: { freq:{fold:0.31, call:0.67, raise:0.02} },
+      Ka: { freq:{fold:0.02, call:0.98, raise:0.00} },
+      Kb: { freq:{fold:0.02, call:0.98, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.85, call:0.00, raise:0.15} },
-      Jb: { freq:{fold:0.85, call:0.00, raise:0.15} },
+      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3258,11 +3258,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.62, call:0.38} },
-      Kb: { freq:{fold:0.62, call:0.38} },
+      Ka: { freq:{fold:0.36, call:0.64} },
+      Kb: { freq:{fold:0.36, call:0.64} },
       Qb: { freq:{fold:0.00, call:1.00} },
-      Ja: { freq:{fold:1.00, call:0.00} },
-      Jb: { freq:{fold:1.00, call:0.00} },
+      Ja: { freq:{fold:0.99, call:0.01} },
+      Jb: { freq:{fold:0.99, call:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3292,9 +3292,9 @@
     const strat = {
       Ka: { freq:{check:1.00, bet:0.00} },
       Kb: { freq:{check:1.00, bet:0.00} },
-      Qb: { freq:{check:0.46, bet:0.54} },
-      Ja: { freq:{check:0.78, bet:0.22} },
-      Jb: { freq:{check:0.78, bet:0.22} },
+      Qb: { freq:{check:0.74, bet:0.26} },
+      Ja: { freq:{check:0.84, bet:0.16} },
+      Jb: { freq:{check:0.84, bet:0.16} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3322,11 +3322,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.04, call:0.96, raise:0.00} },
-      Kb: { freq:{fold:0.04, call:0.96, raise:0.00} },
+      Ka: { freq:{fold:0.25, call:0.75, raise:0.00} },
+      Kb: { freq:{fold:0.25, call:0.75, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
-      Ja: { freq:{fold:0.97, call:0.00, raise:0.03} },
-      Jb: { freq:{fold:0.97, call:0.00, raise:0.03} },
+      Ja: { freq:{fold:0.99, call:0.00, raise:0.01} },
+      Jb: { freq:{fold:0.99, call:0.00, raise:0.01} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3354,8 +3354,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.19, call:0.81} },
-      Kb: { freq:{fold:0.19, call:0.81} },
+      Ka: { freq:{fold:0.97, call:0.03} },
+      Kb: { freq:{fold:0.97, call:0.03} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
@@ -3386,11 +3386,11 @@
     ];
 
     const strat = {
-      Ka: { freq:{check:0.96, bet:0.04} },
-      Kb: { freq:{check:0.96, bet:0.04} },
+      Ka: { freq:{check:1.00, bet:0.00} },
+      Kb: { freq:{check:1.00, bet:0.00} },
       Qb: { freq:{check:0.00, bet:1.00} },
-      Ja: { freq:{check:0.92, bet:0.08} },
-      Jb: { freq:{check:0.92, bet:0.08} },
+      Ja: { freq:{check:0.93, bet:0.07} },
+      Jb: { freq:{check:0.93, bet:0.07} },
     };
     const hands = cards.map(c => {
       const s = strat[c.id];
@@ -3418,8 +3418,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.61, call:0.39, raise:0.00} },
-      Kb: { freq:{fold:0.61, call:0.39, raise:0.00} },
+      Ka: { freq:{fold:0.84, call:0.15, raise:0.00} },
+      Kb: { freq:{fold:0.84, call:0.15, raise:0.00} },
       Qb: { freq:{fold:0.00, call:0.00, raise:1.00} },
       Ja: { freq:{fold:1.00, call:0.00, raise:0.00} },
       Jb: { freq:{fold:1.00, call:0.00, raise:0.00} },
@@ -3450,8 +3450,8 @@
     ];
 
     const strat = {
-      Ka: { freq:{fold:0.80, call:0.20} },
-      Kb: { freq:{fold:0.80, call:0.20} },
+      Ka: { freq:{fold:1.00, call:0.00} },
+      Kb: { freq:{fold:1.00, call:0.00} },
       Qb: { freq:{fold:0.00, call:1.00} },
       Ja: { freq:{fold:1.00, call:0.00} },
       Jb: { freq:{fold:1.00, call:0.00} },
