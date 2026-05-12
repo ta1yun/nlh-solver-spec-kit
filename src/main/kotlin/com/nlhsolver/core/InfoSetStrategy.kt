@@ -207,6 +207,12 @@ class StrategyProfile {
      * Get or create an InfoSetStrategy for a given information set.
      */
     fun getInfoSetStrategy(infoSet: String, numActions: Int): InfoSetStrategy {
+        val existing = infoSets[infoSet]
+        if (existing != null && existing.numActions != numActions) {
+            error("Info set '$infoSet' action count mismatch: " +
+                  "existing=${existing.numActions}, requested=$numActions. " +
+                  "Same info set must always have same action count!")
+        }
         return infoSets.getOrPut(infoSet) {
             InfoSetStrategy(infoSet, numActions)
         }

@@ -110,7 +110,7 @@ data class LeducState(
             return if (lastPlayer == 0) {
                 doubleArrayOf(-p1Invested, p1Invested)
             } else {
-                doubleArrayOf(p1Invested, -p2Invested)
+                doubleArrayOf(p2Invested, -p2Invested)
             }
         }
 
@@ -240,16 +240,21 @@ data class LeducState(
         val card = if (player == 0) p1Card else p2Card
         val rank = rankName(card)
 
-        // Round 1: rank + history
+        // CRITICAL: Include player ID to match zig implementation
+        // P0 and P1 must have separate info sets even with same card!
+        // P0 acts first (BTN), P1 acts second (BB) - different strategic positions
+        val playerPrefix = "P$player:"
+
+        // Round 1: player + rank + history
         if (round == 1) {
-            return "$rank $history"
+            return "$playerPrefix$rank $history"
         }
 
-        // Round 2: rank + board + FULL history (including R1)
+        // Round 2: player + rank + board + FULL history (including R1)
         // CRITICAL: Must include R1 history to distinguish pot sizes
         val board = rankName(boardCard)
         val fullHistory = history.replace("|", "d")  // Use 'd' separator for consistency
-        return "$rank$board $fullHistory"
+        return "$playerPrefix$rank$board $fullHistory"
     }
 
     override fun getStateHash(): String {

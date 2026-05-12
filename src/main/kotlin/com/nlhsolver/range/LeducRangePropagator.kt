@@ -3,7 +3,7 @@ package com.nlhsolver.range
 import com.nlhsolver.core.GameAction
 import com.nlhsolver.core.GameState
 import com.nlhsolver.core.StrategyProfile
-import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.integration.LeducState
 
 /**
  * Propagates Leduc ranges through game tree actions.
@@ -25,7 +25,7 @@ class LeducRangePropagator : RangePropagator {
         state: GameState,
         profile: StrategyProfile
     ): Range {
-        val leducState = state as LeducWithSuitAbstraction
+        val leducState = state as LeducState
         val leducRange = currentRange as LeducRange
 
         val actions = leducState.getLegalActions()
@@ -81,7 +81,7 @@ class LeducRangePropagator : RangePropagator {
      * - Round 2: "KQ xbrcdx" (rank+board, no dash, history with d separator)
      */
     private fun getInfoSetForHand(
-        state: LeducWithSuitAbstraction,
+        state: LeducState,
         hand: LeducHand
     ): String {
         val rank = hand.rankName
