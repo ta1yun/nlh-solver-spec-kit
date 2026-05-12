@@ -90,6 +90,38 @@ class CFRSolver(
     }
 
     /**
+     * Train the solver on multiple deals per iteration.
+     * This is the correct way to train on games with chance nodes (like poker).
+     *
+     * @param deals List of deals to train on
+     * @param iterations Number of CFR iterations to run
+     * @param callback Optional callback function called after each iteration
+     */
+    fun trainOnDeals(
+        deals: List<GameState>,
+        iterations: Int,
+        callback: ((iteration: Int, exploitability: Double?) -> Unit)? = null
+    ) {
+        for (iteration in 1..iterations) {
+            currentIteration++
+
+            // Run CFR iteration on all deals
+            for (deal in deals) {
+                val reachProbs = DoubleArray(numPlayers) { 1.0 }
+                cfr(deal, reachProbs)
+            }
+
+            // Apply CFR+ optimizations if enabled
+            if (enableCFRPlus) {
+                applyCFRPlusOptimizations()
+            }
+
+            // Invoke callback if provided
+            callback?.invoke(currentIteration, null)
+        }
+    }
+
+    /**
      * CFR recursive algorithm.
      *
      * @param state Current game state

@@ -232,6 +232,102 @@ test("Same-rank cards have identical EVs") {
 
 ---
 
+## Viewer UI
+
+### Range-Weighted Strategy Display
+**Decision:** Display action frequencies weighted by range composition
+**Date:** 2026-05-06
+**Status:** Implemented
+**Rationale:**
+- Per-hand frequencies can be misleading (rare hands with aggressive strategies)
+- Range-weighted aggregate shows what actually happens in equilibrium
+- Critical for understanding polarized ranges (e.g., after betting actions)
+
+**Implementation:**
+- Each hand exports `rangeWeight` (normalized to sum to 1.0 per node)
+- Aggregate strategy: `Σ(freq[action] × rangeWeight)` across all hands
+- Toggle between per-hand view and range-weighted view
+
+**Example:**
+```
+xb node (P1 check, P2 bet):
+- J: weight=0.93, check=0.93 (weak hands check often)
+- K: weight=0.25, check=0.25 (strong hands bet often)
+- Range strategy: Check=93.5%, Bet=6.5% (J dominates the checking range)
+```
+
+**References:**
+- `viewer/leduc-range-viewer.html`
+- `src/test/kotlin/com/nlhsolver/export/GenerateTreeStructure.kt:computeHeroRange()`
+
+---
+
+### Proportional Visual Encoding
+**Decision:** Scale action bar heights proportionally to range weight
+**Date:** 2026-05-06
+**Status:** Implemented
+**Rationale:**
+- Immediate visual feedback on range composition
+- Rare hands (low weight) = shorter bars, common hands (high weight) = taller bars
+- Generalizes perfectly to NLH and any poker variant
+- Formula: `barHeight = rangeWeight × cardHeight`
+
+**Visual design:**
+- 85% opacity for translucent effect
+- Smooth transitions when navigating nodes
+- Exact proportionality (no minimum height) - rare hands can have very small bars
+
+**NLH implications:**
+- Same formula applies regardless of card display size
+- Works for any range representation (cards, combos, buckets)
+
+**References:**
+- `viewer/leduc-range-viewer.html:LeducCard` component
+
+---
+
+### Range Weight Normalization
+**Decision:** Normalize range weights to sum to 1.0 at each decision node
+**Date:** 2026-05-06
+**Status:** Implemented
+**Rationale:**
+- Raw equilibrium probabilities don't sum to 1.0 (filtered ranges, rounding)
+- Normalized weights make percentages intuitive (sum to 100%)
+- Critical for accurate aggregate strategy calculation
+
+**Pattern:**
+```kotlin
+val rawWeights = hands.map { heroRange.getWeight(it) }
+val total = rawWeights.sum()
+val normalized = rawWeights.map { it / total }
+```
+
+**References:**
+- `src/test/kotlin/com/nlhsolver/export/GenerateTreeStructure.kt:buildTreeNode()`
+
+---
+
+### Viewer File Separation
+**Decision:** Create separate viewer files per game variant, don't modify shared templates
+**Date:** 2026-05-06
+**Status:** Implemented
+**Rationale:**
+- `strategy-viewer.html` is shared across multiple projects
+- Game-specific features go in dedicated files (e.g., `leduc-range-viewer.html`)
+- For NLH, iterate exclusively on externally generated UI files
+- Prevents breaking changes to shared infrastructure
+
+**Workflow:**
+1. Base file: `viewer/leduc-range-viewer.html` (Leduc)
+2. For major versions: create `viewer/leduc-range-viewer-v2.html` etc.
+3. NLH will have its own externally generated viewer
+
+**References:**
+- `CLAUDE.md:UI/Viewer Development Rules`
+- `deploy-viewer.sh` (deploys leduc-range-viewer.html as index.html)
+
+---
+
 ## Future Decisions (Planned)
 
 ### NLH Blueprint Abstraction Strategy
@@ -256,7 +352,81 @@ test("Same-rank cards have identical EVs") {
 
 ---
 
+## Validation: Leduc CFR vs Zig Reference
+
+### CFR Implementation Verified Correct
+**Date:** 2026-05-11
+**Status:** Validated
+
+Our `CFRSolver.kt` vanilla CFR implementation is **bit-for-bit identical** to the zig reference (`/tmp/zig-leduc-cfr`). Verified by tracing `P0:J` info set over 10 iterations — all regret and average strategy values match exactly.
+
+**How we verified:** Compiled zig reference with tracing enabled, compared against Kotlin test output. Every decimal place matched.
+
+---
+
+### trainOnDeals() Convenience Method
+**Date:** 2026-05-11
+**Status:** Implemented
+
+Added `CFRSolver.trainOnDeals(deals, iterations)` as the idiomatic way to train on multi-deal games. Functionally equivalent to calling `train()` per deal for vanilla CFR (regrets accumulate the same way either way), but:
+
+- Keeps `currentIteration` consistent with the outer iteration count
+- Matters for CFR+ (iteration-weighted discounting uses `currentIteration`)
+- Makes training intent explicit
+
+```kotlin
+solver.trainOnDeals(allDeals, iterations = 100)
+```
+
+---
+
+### Bug: Exploitability Calculator Ignored Info Set Constraint
+**Date:** 2026-05-11
+**Status:** Fixed (complete rewrite)
+
+**Symptom:** Exploitability showed ~67% after 100 iterations where zig showed 6%.
+
+**Root cause:** `computeBestResponse()` was greedily maximizing per game state. This is wrong for imperfect information games — the best responder must choose the **same action** for all game states within the same info set (they can't see the opponent's hidden cards).
+
+**Zig's correct algorithm (policy iteration):**
+1. For each deal, traverse the tree and accumulate action values at each BR player info set, weighted by **opponent reach probability**
+2. After all deals, pick the best action per info set (weighted average across all states in that info set)
+3. Repeat until the policy converges (≤10 iterations for Leduc)
+4. Final evaluation using converged policy
+
+**Our wrong algorithm:**
+- At each BR player node: `maxValue = max(actionValue0, actionValue1, ...)` — ignores that the same info set may appear with different card combinations requiring a consistent choice.
+
+**Fix:** Rewrote `ExploitabilityCalculator` to use zig's policy iteration approach. Key change: accumulate `InfoSetStats` (action values × opponent reach) across all deals, then pick best action per info set after seeing all deals.
+
+**Results after fix:**
+| Iters | Ours | Zig |
+|-------|------|-----|
+| 100 | 6.09% (30.5 mbb/g) | 6.09% (30.45 mbb/g) ✓ |
+| 300 | 2.92% (14.6 mbb/g) | 2.92% (14.58 mbb/g) ✓ |
+| 1000 | 1.42% (7.1 mbb/g) | 1.39% (6.96 mbb/g) ✓ |
+
+**References:**
+- `src/main/kotlin/com/nlhsolver/core/ExploitabilityCalculator.kt`
+- `src/main/kotlin/com/nlhsolver/core/CFRSolver.kt:trainOnDeals()`
+- Zig reference: `/tmp/zig-leduc-cfr/src/leduc/play.zig:bestResponseValue()`
+
+---
+
 ## Update Log
+
+- **2026-05-11:** Leduc CFR validation against zig reference
+  - Confirmed CFR algorithm is correct (traces match zig exactly)
+  - Added trainOnDeals() convenience method for multi-deal training
+  - Rewrote exploitability calculator with policy iteration (was greedy per-state, now correct per-info-set)
+  - Now matches zig exploitability within noise at all checkpoints
+
+- **2026-05-06:** Range-weighted viewer implementation
+  - Added range-weighted strategy display decision
+  - Added proportional visual encoding (bar heights)
+  - Added range weight normalization pattern
+  - Added viewer file separation workflow
+  - Documented generalized principles for NLH
 
 - **2026-04-28:** Initial creation
   - Added betting round completion, EV calculation, abstraction consistency
