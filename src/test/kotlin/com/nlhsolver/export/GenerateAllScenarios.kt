@@ -119,19 +119,30 @@ fun trainSolver(iterations: Int = 100000, deepScenarioWeight: Double = 0.2): Str
         }
     }
 
-    val solver = CFRSolver(numPlayers = 2, enableCFRPlus = true)
-    val reportInterval = if (iterations >= 1000000) 100000 else 25000
+    // Vanilla CFR: validated to match zig reference, converges faster than CFR+ on Leduc.
+    // See DESIGN_DECISIONS.md "CFR+ Underperforms Vanilla CFR on Leduc" for benchmark data.
+    val solver = CFRSolver(numPlayers = 2, enableCFRPlus = false)
 
-    repeat(iterations) { i ->
-        // Sample from deep scenarios with probability deepScenarioWeight
-        val matchup = if (Math.random() < deepScenarioWeight) {
-            deepScenarios[i % deepScenarios.size]
-        } else {
-            allMatchups[i % allMatchups.size]
+    if (deepScenarioWeight == 0.0) {
+        // Validated path: trainOnDeals for clean, reproducible epochs.
+        // `iterations` = number of outer epochs over all 30 deals.
+        val reportInterval = maxOf(1, iterations / 10)
+        solver.trainOnDeals(allMatchups, iterations) { iter, _ ->
+            if (iter % reportInterval == 0) println("  $iter / $iterations epochs")
         }
-
-        solver.train(matchup, iterations = 1)
-        if ((i + 1) % reportInterval == 0) println("  ${i + 1} iterations")
+    } else {
+        // Legacy random-sampling path for deep-scenario oversampling.
+        // `iterations` = total individual traversals.
+        val reportInterval = if (iterations >= 1000000) 100000 else 25000
+        repeat(iterations) { i ->
+            val matchup = if (Math.random() < deepScenarioWeight) {
+                deepScenarios[i % deepScenarios.size]
+            } else {
+                allMatchups[i % allMatchups.size]
+            }
+            solver.train(matchup, iterations = 1)
+            if ((i + 1) % reportInterval == 0) println("  ${i + 1} iterations")
+        }
     }
 
     return solver.getStrategyProfile()

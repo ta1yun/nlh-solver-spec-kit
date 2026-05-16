@@ -34,73 +34,51 @@ class GenerateTreeStructure : FunSpec({
     test("Generate recursive tree structure") {
         println("\n=== Generating Recursive Tree ===\n")
 
-        // Train solver with higher iterations, NO oversampling to avoid overfitting
-        println("Training solver with 5M iterations (uniform sampling for clean equilibrium)...")
-        val profile = trainSolver(iterations = 5_000_000, deepScenarioWeight = 0.0)
+        // 200_000 epochs × 30 deals = 6M traversals, vanilla CFR.
+        // Vanilla CFR is used because it outperforms CFR+ on Leduc (see DESIGN_DECISIONS.md).
+        println("Training solver: 200,000 epochs × 30 deals (vanilla CFR)...")
+        val profile = trainSolver(iterations = 200_000, deepScenarioWeight = 0.0)
 
-        // Measure exploitability of trained solution
-        // IMPORTANT: Must match training setup (all boards, not just one)
+        // Measure exploitability using validated multi-deal policy iteration approach.
         println("\nMeasuring exploitability...")
         val exploitCalc = com.nlhsolver.core.ExploitabilityCalculator(numPlayers = 2)
-
-        // Generate ALL matchups (same as trainSolver)
         val rootStates = mutableListOf<LeducState>()
         for (p1Card in 0..5) {
             for (p2Card in 0..5) {
                 for (boardCard in 0..5) {
                     if (p1Card != p2Card && p1Card != boardCard && p2Card != boardCard) {
-                        rootStates.add(
-                            LeducState(
-                                p1Card = p1Card,
-                                p2Card = p2Card,
-                                boardCard = boardCard,
-                                round = 1,
-                                p1Invested = 1.0,
-                                p2Invested = 1.0,
-                                history = ""
-                            )
-                        )
+                        rootStates.add(LeducState(
+                            p1Card = p1Card, p2Card = p2Card, boardCard = boardCard,
+                            round = 1, p1Invested = 1.0, p2Invested = 1.0, history = ""
+                        ))
                     }
                 }
             }
         }
 
-        var totalExploit = 0.0
-        for (rootState in rootStates) {
-            totalExploit += exploitCalc.calculateExploitability(rootState, profile)
-        }
-        val avgExploit = totalExploit / rootStates.size
-        val exploitPct = (avgExploit / 3.0) * 100
-
-        println("  All boards: ${rootStates.size} matchups")
-        println("  Total exploitability: ${String.format("%.6f", avgExploit)} BB (${String.format("%.2f", exploitPct)}% of pot)")
+        val exploit = exploitCalc.calculateExploitability(rootStates, profile)
+        println("  Exploitability: ${String.format("%.2f", exploit * 100)}% (${String.format("%.1f", exploit * 500)} mbb/g)")
+        println("  Info sets trained: ${rootStates.size} pre-dealt matchups for measurement")
         println()
 
         // Generate tree for each board
         val trees = mutableListOf<String>()
         for (board in listOf("J", "Q", "K")) {
-            val boardCard = when(board) { "J" -> 0; "Q" -> 2; "K" -> 4; else -> 2 }
-
             val initialState = LeducState(
-                p1Card = 1, // Sample card
-                p2Card = 3,
-                boardCard = -1, // Board not dealt yet in Round 1
-                round = 1,
-                p1Invested = 1.0,
-                p2Invested = 1.0,
-                history = ""
+                p1Card = 1, p2Card = 3,
+                boardCard = -1,
+                round = 1, p1Invested = 1.0, p2Invested = 1.0, history = ""
             )
-
             println("Building tree for board $board...")
             val tree = buildTreeNode(initialState, board, profile, mutableSetOf())
-
             trees.add("  ${board.lowercase()}: ${tree}")
         }
 
         // Write output
         val js = StringBuilder()
         js.appendLine("// Recursive Leduc Tree Structure")
-        js.appendLine("// Each node contains its children, making navigation simple")
+        js.appendLine("// Solver: vanilla CFR, 200k epochs × 30 deals")
+        js.appendLine("// Exploitability: ${String.format("%.2f", exploit * 100)}% (${String.format("%.1f", exploit * 500)} mbb/g)")
         js.appendLine()
         js.appendLine("(function() {")
         js.appendLine("  window.LEDUC_TREE = {")
@@ -112,6 +90,7 @@ class GenerateTreeStructure : FunSpec({
         File(outputPath).writeText(js.toString())
 
         println("\n✓ Exported recursive tree to $outputPath")
+        println("  Copy to viewer/leduc-tree.js to update the viewer.")
     }
 
     test("Validate chance nodes appear only when betting rounds complete") {

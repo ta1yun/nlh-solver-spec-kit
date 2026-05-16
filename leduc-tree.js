@@ -1,5 +1,6 @@
 // Recursive Leduc Tree Structure
-// Subgame refinement (5M baseline + 2M bc|xb)
+// Solver: vanilla CFR, 200k epochs × 30 deals
+// Exploitability: 0.40% (2.0 mbb/g)
 
 (function() {
   window.LEDUC_TREE = {
