@@ -76,24 +76,26 @@ class LeducRangePropagator : RangePropagator {
     /**
      * Get the info set string for a specific hand at a game state.
      *
-     * This must match the format used during CFR training.
-     * - Round 1: "K " (rank only, space, history)
-     * - Round 2: "KQ xbrcdx" (rank+board, no dash, history with d separator)
+     * Must match LeducState.getInfoSet() exactly:
+     * - Round 1: "P{player}:{rank} {history}"        e.g. "P0:K xb"
+     * - Round 2: "P{player}:{rank}{board} {history}"  e.g. "P1:KQ xxdb"
      */
     private fun getInfoSetForHand(
         state: LeducState,
         hand: LeducHand
     ): String {
+        val player = state.currentPlayer() ?: return "terminal"
         val rank = hand.rankName
         val history = state.history.replace("|", "d")
+        val playerPrefix = "P$player:"
 
         return if (state.round == 1) {
-            "$rank $history"
+            "$playerPrefix$rank $history"
         } else {
             val boardRank = when(state.boardCard / 2) {
                 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "?"
             }
-            "$rank$boardRank $history"  // No dash!
+            "$playerPrefix$rank$boardRank $history"
         }
     }
 }

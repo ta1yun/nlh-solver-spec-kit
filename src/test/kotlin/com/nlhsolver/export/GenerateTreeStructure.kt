@@ -230,12 +230,15 @@ fun computeHeroRange(
     for ((roundIdx, roundHistory) in rounds.withIndex()) {
         if (roundHistory.isEmpty()) continue
 
-        // If this is round 2, update board card
+        // If this is round 2, update board card and add the round separator "|" so that
+        // history-based info set keys in R2 match the "xx|x" format produced by LeducState.
+        // Without "|", applyAction in round=2 produces "xxx" instead of "xx|x", and
+        // getInfoSetForHand converts to "xxx" instead of "xxdx" — lookup fails.
         if (roundIdx == 1) {
             val boardCard = when(state.boardCard / 2) {
                 0 -> 0; 1 -> 2; 2 -> 4; else -> 2
             }
-            replayState = replayState.copy(boardCard = boardCard, round = 2)
+            replayState = replayState.copy(boardCard = boardCard, round = 2, history = replayState.history + "|")
         }
 
         // Replay each action in this round
@@ -308,12 +311,12 @@ fun computeOpponentRange(
     for ((roundIdx, roundHistory) in rounds.withIndex()) {
         if (roundHistory.isEmpty()) continue
 
-        // If this is round 2, update board card
+        // Same "|" fix as computeHeroRange: without it R2 history is "xxx" not "xx|x".
         if (roundIdx == 1) {
             val boardCard = when(state.boardCard / 2) {
                 0 -> 0; 1 -> 2; 2 -> 4; else -> 2
             }
-            replayState = replayState.copy(boardCard = boardCard, round = 2)
+            replayState = replayState.copy(boardCard = boardCard, round = 2, history = replayState.history + "|")
         }
 
         // Replay each action in this round
@@ -790,9 +793,9 @@ private fun calculateEVForMatchup(
     val activeRank = when(activeCard / 2) { 0 -> "J"; 1 -> "Q"; 2 -> "K"; else -> "Q" }
 
     val infoSetKey = if (round == 1) {
-        "$activeRank $history"
+        "P$currentPlayer:$activeRank $history"
     } else {
-        "$activeRank$boardName $history"
+        "P$currentPlayer:$activeRank$boardName $history"
     }
 
     val strategy = try {
