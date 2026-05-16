@@ -46,6 +46,8 @@ enum class SamplingMode {
  *
  * @param numPlayers Number of players in the game (default: 2)
  * @param enableCFRPlus Enable Regret Matching+ optimization (floors negative regrets at 0)
+ * @param linearAveraging Use linear averaging (weight average strategy by iteration t).
+ *        Defaults to enableCFRPlus. Can be disabled independently to test RM+-only variant.
  * @param regretDiscountFactor Regret discount factor (default: 1.0 = no discounting)
  *        NOTE: Linear discounting (< 1.0) is currently disabled due to convergence issues.
  *        Use 1.0 for production. May be revisited for performance optimization later.
@@ -54,6 +56,7 @@ enum class SamplingMode {
 class CFRSolver(
     val numPlayers: Int = 2,
     val enableCFRPlus: Boolean = true,  // Default to true for RM+ optimization
+    val linearAveraging: Boolean = enableCFRPlus,
     val regretDiscountFactor: Double = 1.0,  // Default to 1.0 (no discounting)
     val samplingMode: SamplingMode = SamplingMode.EXTERNAL  // Default to external sampling
 ) {
@@ -77,7 +80,8 @@ class CFRSolver(
 
             // Run CFR iteration with uniform reach probabilities
             val reachProbs = DoubleArray(numPlayers) { 1.0 }
-            cfr(rootState, reachProbs)
+            val strategyWeight = if (linearAveraging) currentIteration.toDouble() else 1.0
+            cfr(rootState, reachProbs, strategyWeight)
 
             // Apply CFR+ optimizations if enabled
             if (enableCFRPlus) {
@@ -106,9 +110,10 @@ class CFRSolver(
             currentIteration++
 
             // Run CFR iteration on all deals
+            val strategyWeight = if (linearAveraging) currentIteration.toDouble() else 1.0
             for (deal in deals) {
                 val reachProbs = DoubleArray(numPlayers) { 1.0 }
-                cfr(deal, reachProbs)
+                cfr(deal, reachProbs, strategyWeight)
             }
 
             // Apply CFR+ optimizations if enabled
@@ -130,7 +135,8 @@ class CFRSolver(
      */
     private fun cfr(
         state: GameState,
-        reachProbs: DoubleArray
+        reachProbs: DoubleArray,
+        strategyWeight: Double = 1.0
     ): DoubleArray {
         // Terminal node: return utilities
         if (state.isTerminal()) {
@@ -160,7 +166,7 @@ class CFRSolver(
 
         // Get current strategy (only for player nodes, not chance)
         val strategy = if (!isChance && currentPlayer != null && infoSetStrategy != null) {
-            infoSetStrategy.getStrategy(reachProbs[currentPlayer])
+            infoSetStrategy.getStrategy(reachProbs[currentPlayer], strategyWeight)
         } else {
             DoubleArray(numActions) { 1.0 / numActions }  // Uniform for chance
         }
@@ -178,7 +184,7 @@ class CFRSolver(
                 val nextState = state.applyAction(sampledAction)
                 val nextReachProbs = reachProbs.copyOf()
                 // For chance nodes, reach probability doesn't change by strategy
-                actionUtilities[sampledIndex] = cfr(nextState, nextReachProbs)
+                actionUtilities[sampledIndex] = cfr(nextState, nextReachProbs, strategyWeight)
 
                 // Scale by inverse probability to maintain unbiased estimate
                 val chanceProb = 1.0 / numActions  // Assuming uniform chance distribution
@@ -199,7 +205,7 @@ class CFRSolver(
                 }
 
                 // Recurse
-                actionUtilities[i] = cfr(nextState, nextReachProbs)
+                actionUtilities[i] = cfr(nextState, nextReachProbs, strategyWeight)
             }
         }
 

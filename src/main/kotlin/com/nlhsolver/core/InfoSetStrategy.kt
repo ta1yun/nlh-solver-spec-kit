@@ -49,7 +49,7 @@ class InfoSetStrategy(
      *
      * @return Array of action probabilities (sum to 1.0)
      */
-    fun getStrategy(reachProbability: Double = 1.0): DoubleArray = synchronized(lock) {
+    fun getStrategy(reachProbability: Double = 1.0, strategyWeight: Double = 1.0): DoubleArray = synchronized(lock) {
         val strategy = DoubleArray(numActions)
         var normalizingSum = 0.0
 
@@ -68,10 +68,12 @@ class InfoSetStrategy(
             }
         }
 
-        // Update cumulative strategy (weighted by reach probability)
+        // Update cumulative strategy weighted by reach and strategyWeight.
+        // CFR+ uses strategyWeight=t (iteration number) to downweight noisy early strategies.
+        // Vanilla CFR uses strategyWeight=1.
         if (reachProbability > 0) {
             for (i in 0 until numActions) {
-                cumulativeStrategy[i] += reachProbability * strategy[i]
+                cumulativeStrategy[i] += strategyWeight * reachProbability * strategy[i]
             }
         }
 
