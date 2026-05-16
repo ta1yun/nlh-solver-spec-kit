@@ -949,14 +949,14 @@ fun buildTreeNode(
         // Convert history: replace | with d to match solver format
         val solverHistory = history.replace("|", "d")
 
-        // Round 1: info set is just rank (e.g., "K ")
-        // Round 2: info set is rank+board WITHOUT dash (e.g., "KQ ")
-        // This matches LeducState.getInfoSet() which uses
-        // getCanonicalHand(...).replace("-", "") in Round 2
+        // Must match LeducState.getInfoSet() exactly:
+        //   Round 1: "P{player}:{rank} {history}"  e.g. "P0:K xb"
+        //   Round 2: "P{player}:{rank}{board} {fullHistory}"  e.g. "P1:KQ xxdb"
+        val playerPrefix = "P${currentPlayer}:"
         val infoSetKey = if (round == 1) {
-            "$rank $solverHistory"
+            "$playerPrefix$rank $solverHistory"
         } else {
-            "$rank$boardRank $solverHistory"  // No dash!
+            "$playerPrefix$rank$boardRank $solverHistory"
         }
 
         val strategy = try {
