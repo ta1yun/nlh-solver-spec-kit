@@ -3,7 +3,9 @@ package com.nlhsolver.integration
 import com.nlhsolver.core.CFRSolver
 import com.nlhsolver.core.ExploitabilityCalculator
 import com.nlhsolver.core.SamplingMode
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.doubles.shouldBeLessThan
 
 /**
  * Direct comparison with zig-leduc-cfr reference implementation.
@@ -41,6 +43,16 @@ class CompareWithZigTest : FunSpec({
 
         val exploitCalc = ExploitabilityCalculator(numPlayers = 2)
 
+        // Zig reference (vanilla CFR, 120 deals), exploitability as % of pot.
+        // Training here is deterministic: VANILLA mode with pre-dealt boards has no
+        // chance nodes, so these numbers reproduce exactly run to run.
+        val zigReference = mapOf(
+            100 to 6.09,
+            300 to 2.92,
+            1000 to 1.39
+        )
+        val tolerancePct = 0.25
+
         // Train and checkpoint at key iterations
         val checkpoints = listOf(10, 50, 100, 300, 1000)
         var currentIter = 0
@@ -61,6 +73,18 @@ class CompareWithZigTest : FunSpec({
             println("After $currentIter iterations:")
             println("  Exploitability: ${String.format("%.2f", exploitPct)}% (${String.format("%.1f", mbbPerGame)} mbb/g)")
             println("  Info sets: ${solver.getStrategyProfile().size()}")
+
+            val expected = zigReference[currentIter]
+            if (expected != null) {
+                val delta = Math.abs(exploitPct - expected)
+                println("  Zig reference: ${String.format("%.2f", expected)}% (delta ${String.format("%.2f", delta)})")
+                withClue(
+                    "Diverged from zig reference at $currentIter iterations: " +
+                        "ours=${String.format("%.2f", exploitPct)}%, zig=${String.format("%.2f", expected)}%"
+                ) {
+                    delta shouldBeLessThan tolerancePct
+                }
+            }
             println()
         }
 
@@ -71,7 +95,6 @@ class CompareWithZigTest : FunSpec({
         println(" 1000 iters: 1.39%  (6.96 mbb/g)")
         println("=" .repeat(60))
         println()
-        println("If our numbers are similar, we match the reference!")
-        println("If not, there's still a bug to find.")
+        println("Matched the reference within ${tolerancePct} percentage points at all checkpoints.")
     }
 })
