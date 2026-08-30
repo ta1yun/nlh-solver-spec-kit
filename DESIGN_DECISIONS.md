@@ -380,6 +380,46 @@ solver.trainOnDeals(allDeals, iterations = 100)
 
 ---
 
+### Best Response Runs to a Fixpoint, Not a Fixed Sweep Count
+**Date:** 2026-08-30
+**Status:** Implemented
+
+`bestResponseValue()` used `repeat(10)` with an `if (!changed) return@repeat` intended as an early exit. In Kotlin `return@repeat` continues the lambda rather than breaking, so the loop always ran exactly 10 sweeps and never terminated early.
+
+**Why 10 is not an arbitrary-but-fine number.** Against a fixed opponent the best-responding player faces a finite *acyclic* MDP, so greedy improvement converges, and each sweep propagates values back exactly **one decision level**. Sweeps required is therefore bounded by the best responder's decision depth:
+
+- Leduc: ~4 decisions → 10 sweeps was always sufficient, which is why nothing caught this
+- NLH: four streets with multiple bet sizings → comfortably exceeds 10
+
+**Why truncation is the worst possible failure for this component.** A truncated policy is not "an approximate best response" — it is an arbitrary unconverged policy, and it can be *worse* than the strategy it is meant to exploit. Since exploitability is `br_i - value_i(profile)` and the profile is itself a feasible response, `exploitability >= 0` is an invariant. A truncated best response can violate it. On a 14-level test ladder:
+
+| | Exploitability |
+|---|---|
+| Old (10 sweeps, silent) | **-3.05e-5** |
+| Fixed (runs to fixpoint) | 0.499969482421875 (analytically exact) |
+
+The negative value is the *detectable* case. The dangerous case is mild truncation, which returns a small positive under-estimate that reads as healthy convergence.
+
+**Decision:** run to an actual fixpoint. `maxPolicyIterations` (default 1000) is a cycle guard, not a tuning knob — exceeding it **throws** rather than returning a number, because convergence is guaranteed by the argument above and exhausting the cap means a bug. `lastPolicyIterationSweeps` exposes the max sweeps across both players for diagnostics.
+
+**NLH implication:** if this ever throws on NLH, the fix is to investigate, not to raise the cap.
+
+---
+
+### Exploitability Accumulator Sized to numActions
+**Date:** 2026-08-30
+**Status:** Implemented
+
+`InfoSetStats.valueSum` was allocated as a fixed `DoubleArray(3)` while `accumulate()` and `bestAction()` both looped to `numActions`. Any info set with 4+ actions threw `ArrayIndexOutOfBoundsException`.
+
+Leduc and AKQ both cap at 3 actions (check/bet, fold/call/raise), so the entire test suite passed. NLH exceeds 3 as soon as the action abstraction carries more than one bet sizing.
+
+Now sized to `numActions`. Regression test uses Rock-Paper-Scissors-Lizard-Spock as a 2-step imperfect-information game: 5 actions, uniform Nash, game value 0 — an analytically known answer rather than a golden number.
+
+**Pattern worth repeating:** both of these bugs were invisible in the validation games and fatal in the target game. When a component is validated only on Leduc/AKQ, ask specifically what those games *cannot* exercise — action count, tree depth, chance-node structure.
+
+---
+
 ### Bug: Exploitability Calculator Ignored Info Set Constraint
 **Date:** 2026-05-11
 **Status:** Fixed (complete rewrite)
@@ -449,6 +489,15 @@ Added `linearAveraging: Boolean = enableCFRPlus` parameter to `CFRSolver` to all
 ---
 
 ## Update Log
+
+- **2026-08-30:** Exploitability calculator hardened for NLH; Leduc consolidated on `LeducState`
+  - Best response now runs to a fixpoint (was a fixed 10 sweeps that silently under-reported on deep games)
+  - Accumulator sized to `numActions` (was a fixed cap of 3, fatal for NLH bet sizings)
+  - Zig comparison converted from a printout to assertions; AKQ test now runs over all deals
+    (the single-deal version was degenerate — one state per info set makes a clairvoyant
+    best response indistinguishable from a correct one, so it passed regardless)
+  - Deleted `LeducWithSuitAbstraction`, `LeducWithChanceNodes`, a shadowing duplicate class,
+    and `examples/leduc` (infinite recursion + wrong round-2 fold payouts)
 
 - **2026-05-11:** CFR+ vs vanilla CFR benchmark on Leduc
   - Found RM+ flooring is primary cause of CFR+ underperformance on Leduc (not linear averaging)

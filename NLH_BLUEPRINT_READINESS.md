@@ -1,6 +1,7 @@
 # NLH Blueprint Readiness Assessment
 
 **Date:** 2026-05-07
+**Updated:** 2026-08-30 (exploitability calculator NLH-readiness)
 **Context:** After Phase 1 refactoring (EVCalculator + TreeBuilder abstractions)
 
 ---
@@ -13,7 +14,22 @@
 - `GameState` interface - Generic, works for any game
 - `CFRSolver` - Proven with Leduc (5M iterations, converges)
 - `StrategyProfile` - ConcurrentHashMap with per-info-set locking
-- `ExploitabilityCalculator` - Game-agnostic
+- `ExploitabilityCalculator` - Game-agnostic **and now NLH-safe** (see below)
+
+### 2026-08-30: Exploitability calculator made NLH-safe
+
+`ExploitabilityCalculator` was marked "game-agnostic" but contained two defects that Leduc and AKQ structurally could not expose. Both are fixed; both are worth understanding, because the *pattern* will recur.
+
+| Defect | Leduc/AKQ behaviour | NLH behaviour |
+|--------|--------------------|---------------|
+| Accumulator fixed at `DoubleArray(3)` | Fine — both games cap at 3 actions | `ArrayIndexOutOfBoundsException` on any info set with 4+ actions, i.e. as soon as the action abstraction has >1 bet sizing |
+| Best response capped at 10 policy-iteration sweeps | Fine — Leduc is ~4 decisions deep | **Silently under-reports.** Sweeps needed is bounded by the best responder's decision depth; four streets with multiple sizings exceeds 10 |
+
+The second is the more dangerous one. A truncated best response is not an approximation — it is an unconverged policy that can be weaker than the profile it is exploiting, producing a *flatteringly low* exploitability number. It now throws rather than returning a number; if it throws on NLH, investigate rather than raising `maxPolicyIterations`.
+
+**Validation state:** matches the zig reference within 0.25pp at 100/300/1000 iterations (now asserted, previously eyeballed), converges at the O(1/√T) rate CFR's regret bound predicts, and reports 0.458 for a uniform AKQ profile.
+
+**Transferable lesson:** when a shared component is validated only against Leduc/AKQ, enumerate what those games *cannot* exercise — action count, tree depth, chance-node placement, number of streets — and test those axes directly. Both bugs sat behind a fully green suite.
 
 **Poker Domain:**
 - `PokerGameState` - Implements GameState for NLH
@@ -39,6 +55,20 @@
 ---
 
 ## ⚠️ What Needs to Be Done
+
+### Known failing tests (as of 2026-08-30)
+
+A targeted sweep (core, examples, regression, range, solver, zig comparison) is **197 passed / 7 failed**. All 7 predate the 2026-08-30 work — verified by re-running with those changes stashed. Three are directly on the NLH path:
+
+| Test | Symptom |
+|------|---------|
+| `solver.BlueprintSolverTest > toSolveConfiguration() should use looser convergence (T132)` | pre-existing |
+| `solver.BlueprintSolverTest > estimateSolveTime() should provide reasonable estimates` | pre-existing |
+| `solver.RangeExtractionTest > should extract BTN opening range (T134, T137, T138)` | pre-existing |
+
+The other four are Leduc-side (tree validation, a history-separator expectation, two `LeducHand`/`LeducRange` assertions) and documented in `docs/leduc/README.md`.
+
+`NLHState` does not exist yet — it is referenced in comments only. Until it does, NLH-shaped properties of shared components have to be tested with synthetic fixtures (the calculator's 5-action and deep-tree regression tests do this).
 
 ### Critical Path (MVP)
 

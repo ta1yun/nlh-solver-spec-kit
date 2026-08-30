@@ -33,7 +33,15 @@ RM+ flooring erases negative-regret memory that helps convergence in small games
 - 200,000 epochs × 30 deals = 6M total traversals
 - Achieves ~0.40% exploitability (2.0 mbb/g)
 
-**Zig reference validation:** Our vanilla CFR traces match the zig reference implementation bit-for-bit at all checkpoints (100 iters: 6.09%, 1000 iters: 1.42%).
+**Zig reference validation:** Our vanilla CFR traces match the zig reference implementation bit-for-bit at all checkpoints. This is now **enforced, not just observed** — `CompareWithZigTest` asserts our exploitability stays within 0.25 percentage points of the zig numbers at 100, 300, and 1000 iterations:
+
+| Iters | Ours | Zig |
+|-------|------|-----|
+| 100   | 6.09% | 6.09% |
+| 300   | 2.92% | 2.92% |
+| 1000  | 1.42% | 1.39% |
+
+Training is deterministic here (VANILLA mode over pre-dealt boards has no chance nodes), so these reproduce exactly run to run.
 
 ## Running the export
 
@@ -64,7 +72,7 @@ The viewer loads `leduc-tree.js` from the same directory and renders the full ga
 
 | File | Purpose |
 |------|---------|
-| `src/main/kotlin/com/nlhsolver/integration/LeducState.kt` | Canonical Leduc game state (chance nodes + suit abstraction) |
+| `src/main/kotlin/com/nlhsolver/integration/LeducState.kt` | **The** Leduc game state (chance nodes + suit abstraction) — the only one |
 | `src/test/kotlin/com/nlhsolver/export/GenerateAllScenarios.kt` | `trainSolver()` — shared training entry point |
 | `src/test/kotlin/com/nlhsolver/export/GenerateTreeStructure.kt` | Tree export → `leduc-tree.js` |
 | `src/main/kotlin/com/nlhsolver/core/CFRSolver.kt` | CFR solver (vanilla + CFR+ modes) |
@@ -79,6 +87,42 @@ The viewer loads `leduc-tree.js` from the same directory and renders the full ga
 | Validation pass | < 10% | ~10 epochs |
 | Development | < 2% | ~10,000 epochs |
 | Production export | < 0.5% | ~200,000 epochs |
+
+## Current state
+
+**Last verified:** 2026-08-30
+
+### Single implementation
+
+`LeducState` is the only Leduc game state. Three others were deleted once it was clear they had diverged:
+
+| Removed | Why |
+|---------|-----|
+| `LeducWithSuitAbstraction` (main) | Superseded by `LeducState`; 34 dependent files were print-only diagnostics |
+| `LeducWithChanceNodes` (main) | `LeducState` covers chance-node mode via `boardCard = -1` |
+| Duplicate `LeducWithSuitAbstraction` in `ProperLeducWithSuitAbstraction.kt` | Same FQN as the main class in the same package, but with an extra `isBettingRoundComplete()`. Test code silently bound to this copy, so those tests were validating a class production code never used. |
+| `examples/leduc/LeducGameState` | Round-1 check-check never reached the board-dealing branch, so the game never terminated (`StackOverflowError`). Also paid round-2 folds to the wrong player. |
+
+Migrating the surviving tests to `LeducState` fixed two of them: a `ClassCastException` in `LeducRangeTest` (the propagator had already moved to `LeducState`, its test had not) and stale `"K "`-style info-set keys in `LeducSolverRegressionTest`, which now need the `P{player}:` prefix.
+
+### Exploitability calculator
+
+`ExploitabilityCalculator` is validated three ways: the zig match above, convergence at the O(1/√T) rate CFR's regret bound predicts, and a large positive value (0.458 on AKQ) for a uniform profile.
+
+Two bugs were fixed that Leduc could not expose — both would have hit NLH. See `DESIGN_DECISIONS.md` for the rationale.
+
+### Known failing tests
+
+Four Leduc-related tests fail, all predating the consolidation. None are caused by `LeducState`:
+
+| Test | Symptom |
+|------|---------|
+| `export.ValidateGameTree` | Expects 0 non-terminal leaves, finds 3000 |
+| `integration.VerifyGameLogic > terminal states and payoffs` | Expects history `"cc\|"`, gets `"cc"` — round-separator disagreement between test and implementation |
+| `range.LeducRangeTest > LeducHand creation and conflicts` | `LeducHand` conflict logic |
+| `range.LeducRangeTest > LeducRange excluding` | Expects weight 0.0, gets 1.0 |
+
+The last two are `LeducHand`/`LeducRange` logic, unrelated to the game state. A targeted sweep (core, examples, regression, range, solver, zig) is **197 passed / 7 failed**; the other 3 failures are NLH blueprint and range-extraction tests.
 
 ## Design decisions
 
