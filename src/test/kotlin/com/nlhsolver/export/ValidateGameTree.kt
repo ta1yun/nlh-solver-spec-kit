@@ -1,6 +1,6 @@
 package com.nlhsolver.export
 
-import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.integration.LeducState
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 
@@ -24,7 +24,7 @@ class ValidateGameTree : FunSpec({
                     if (boardCard == p1Card || boardCard == p2Card) continue
 
                     // Start from root and explore all paths
-                    val rootState = LeducWithSuitAbstraction(
+                    val rootState = LeducState(
                         p1Card = p1Card,
                         p2Card = p2Card,
                         boardCard = boardCard,
@@ -58,7 +58,7 @@ class ValidateGameTree : FunSpec({
  * actually has legal actions available.
  */
 fun validateStateIsNotPrematurelyTerminal(
-    state: LeducWithSuitAbstraction,
+    state: LeducState,
     errors: MutableList<String>
 ) {
     // If game says it's terminal, we're good
@@ -103,7 +103,7 @@ fun validateStateIsNotPrematurelyTerminal(
 
     // Recursively check all children
     for (action in legalActions) {
-        val nextState = state.applyAction(action) as LeducWithSuitAbstraction
+        val nextState = state.applyAction(action) as LeducState
         validateStateIsNotPrematurelyTerminal(nextState, errors)
     }
 }

@@ -1076,3 +1076,11 @@ fun buildTreeNode(
 
     return js.toString()
 }
+
+/**
+ * Formats a double for embedding in generated viewer JS.
+ *
+ * Previously lived in ExportLeducActualStrategies.kt; kept here, package-level,
+ * because both this file and GenerateAllScenarios.kt emit viewer data with it.
+ */
+fun f(value: Double): String = String.format("%.2f", value)

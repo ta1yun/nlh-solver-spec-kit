@@ -3,8 +3,7 @@ package com.nlhsolver.regression
 import com.nlhsolver.core.CFRSolver
 import com.nlhsolver.core.SamplingMode
 import com.nlhsolver.core.StrategyProfile
-import com.nlhsolver.integration.LeducWithSuitAbstraction
-import com.nlhsolver.integration.LeducWithChanceNodes
+import com.nlhsolver.integration.LeducState
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
@@ -13,11 +12,11 @@ import kotlin.math.abs
 /**
  * Regression test for Leduc Hold'em solver.
  *
- * PURPOSE: Document the equilibrium strategies produced by LeducWithChanceNodes implementation
+ * PURPOSE: Document the equilibrium strategies produced by LeducState implementation
  * and ensure basic convergence is working.
  *
  * NOTES:
- * - LeducWithSuitAbstraction (baseline) and LeducWithChanceNodes (refactored) have structural
+ * - LeducState (baseline) and LeducState (refactored) have structural
  *   differences that lead to slightly different training dynamics
  * - Both converge to reasonable equilibria, but not identical due to:
  *   1. Chance node placement (pre-dealt board vs in-tree chance node)
@@ -35,28 +34,28 @@ class LeducSolverRegressionTest : FunSpec({
      */
     val keyInfoSets = listOf(
         // Round 1 root decisions
-        Triple("K ", 2, "K preflop: check or bet"),
-        Triple("Q ", 2, "Q preflop: check or bet"),
-        Triple("J ", 2, "J preflop: check or bet"),
+        Triple("P0:K ", 2, "K preflop: check or bet"),
+        Triple("P0:Q ", 2, "Q preflop: check or bet"),
+        Triple("P0:J ", 2, "J preflop: check or bet"),
 
         // Round 1 facing bet
-        Triple("K b", 3, "K facing bet: fold/call/raise"),
-        Triple("Q b", 3, "Q facing bet: fold/call/raise"),
-        Triple("J b", 3, "J facing bet: fold/call/raise"),
+        Triple("P1:K b", 3, "K facing bet: fold/call/raise"),
+        Triple("P1:Q b", 3, "Q facing bet: fold/call/raise"),
+        Triple("P1:J b", 3, "J facing bet: fold/call/raise"),
 
         // Round 1 after check-bet
-        Triple("K xb", 3, "K after check-bet: fold/call/raise"),
-        Triple("Q xb", 3, "Q after check-bet: fold/call/raise"),
+        Triple("P0:K xb", 3, "K after check-bet: fold/call/raise"),
+        Triple("P0:Q xb", 3, "Q after check-bet: fold/call/raise"),
 
         // Round 2 common spots (board Q as example)
-        Triple("KQ ", 2, "K on Q board: check or bet"),
-        Triple("QQ ", 2, "Q on Q board (pair): check or bet"),
-        Triple("JQ ", 2, "J on Q board: check or bet"),
+        Triple("P0:KQ ", 2, "K on Q board: check or bet"),
+        Triple("P0:QQ ", 2, "Q on Q board (pair): check or bet"),
+        Triple("P0:JQ ", 2, "J on Q board: check or bet"),
 
         // Round 2 facing bet
-        Triple("KQ b", 3, "K on Q board facing bet: fold/call/raise"),
-        Triple("QQ b", 3, "Q on Q board facing bet: fold/call/raise"),
-        Triple("JQ b", 3, "J on Q board facing bet: fold/call/raise"),
+        Triple("P1:KQ b", 3, "K on Q board facing bet: fold/call/raise"),
+        Triple("P1:QQ b", 3, "Q on Q board facing bet: fold/call/raise"),
+        Triple("P1:JQ b", 3, "J on Q board facing bet: fold/call/raise"),
     )
 
     /**
@@ -81,7 +80,7 @@ class LeducSolverRegressionTest : FunSpec({
     }
 
     /**
-     * Refactored solver baseline: capture LeducWithChanceNodes equilibrium.
+     * Refactored solver baseline: capture LeducState equilibrium.
      * Run this to establish expected strategies for the refactored implementation.
      */
     test("Refactored: capture equilibrium strategies") {
@@ -98,8 +97,8 @@ class LeducSolverRegressionTest : FunSpec({
         }
 
         // Basic sanity checks
-        val kStrategy = profile.getInfoSetStrategy("K ", 2).getAverageStrategy()
-        val jStrategy = profile.getInfoSetStrategy("J ", 2).getAverageStrategy()
+        val kStrategy = profile.getInfoSetStrategy("P0:K ", 2).getAverageStrategy()
+        val jStrategy = profile.getInfoSetStrategy("P0:J ", 2).getAverageStrategy()
 
         // K should mostly bet (premium hand)
         (kStrategy[1] > 0.6) shouldBe true
@@ -116,7 +115,7 @@ class LeducSolverRegressionTest : FunSpec({
  */
 private fun trainCurrentSolver(iterations: Int): StrategyProfile {
     val allCards = 0..5
-    val allMatchups = mutableListOf<LeducWithSuitAbstraction>()
+    val allMatchups = mutableListOf<LeducState>()
 
     // Generate all valid matchups
     for (p1 in allCards) {
@@ -124,7 +123,7 @@ private fun trainCurrentSolver(iterations: Int): StrategyProfile {
             for (board in allCards) {
                 if (p1 != p2 && p1 != board && p2 != board) {
                     allMatchups.add(
-                        LeducWithSuitAbstraction(
+                        LeducState(
                             p1Card = p1,
                             p2Card = p2,
                             boardCard = board,
@@ -189,7 +188,7 @@ private fun trainRefactoredSolver(baseIterations: Int): StrategyProfile {
         val (p1, p2) = allPlayerCombos[i % allPlayerCombos.size]
 
         // Create initial state WITHOUT board (will be dealt as chance node)
-        val rootState = LeducWithChanceNodes(
+        val rootState = LeducState(
             p1Card = p1,
             p2Card = p2,
             boardCard = -1,  // Not dealt yet - will be sampled at chance node

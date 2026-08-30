@@ -25,13 +25,13 @@ class LeducSubtreeSolver {
         val (p1Invested, p2Invested) = computeInvestedAmounts(solverHistory)
 
         // Generate all matchups - MUST start from root for CFR to work
-        val matchups = mutableListOf<LeducWithSuitAbstraction>()
+        val matchups = mutableListOf<LeducState>()
         for (p1 in 0..5) {
             for (p2 in 0..5) {
                 if (p1 == p2 || p1 == boardCard || p2 == boardCard) continue
 
                 matchups.add(
-                    LeducWithSuitAbstraction(
+                    LeducState(
                         p1Card = p1,
                         p2Card = p2,
                         boardCard = boardCard,

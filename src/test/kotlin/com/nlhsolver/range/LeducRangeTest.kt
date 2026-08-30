@@ -1,7 +1,7 @@
 package com.nlhsolver.range
 
 import com.nlhsolver.core.CFRSolver
-import com.nlhsolver.integration.LeducWithSuitAbstraction
+import com.nlhsolver.integration.LeducState
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
@@ -53,11 +53,11 @@ class LeducRangeTest : FunSpec({
 
     test("Range propagation - betting polarizes range") {
         // Train a simple solver
-        val matchups = mutableListOf<LeducWithSuitAbstraction>()
+        val matchups = mutableListOf<LeducState>()
         for (p1 in 0..5) {
             for (p2 in 0..5) {
                 if (p1 / 2 != p2 / 2) {  // Different ranks
-                    matchups.add(LeducWithSuitAbstraction(
+                    matchups.add(LeducState(
                         p1Card = p1, p2Card = p2, boardCard = -1,
                         round = 1, p1Invested = 1.0, p2Invested = 1.0, history = ""
                     ))
@@ -73,7 +73,7 @@ class LeducRangeTest : FunSpec({
         val startRange = LeducRange.uniform()
 
         // P1 bets
-        val initialState = LeducWithSuitAbstraction(
+        val initialState = LeducState(
             p1Card = 1, p2Card = 3, boardCard = -1,
             round = 1, p1Invested = 1.0, p2Invested = 1.0, history = ""
         )
